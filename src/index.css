@@ -1,0 +1,133 @@
+:root {
+  --sf-bg: #f4f6fa;
+  --sf-surface: #ffffff;
+  --sf-border: #e2e8f0;
+  --sf-text: #1e293b;
+  --sf-muted: #64748b;
+  --sf-primary: #2563eb;
+  --sf-primary-dark: #1d4ed8;
+  --sf-danger: #dc2626;
+  --sf-warning: #d97706;
+  --sf-success: #16a34a;
+  --sf-sidebar-width: 240px;
+  --sf-header-height: 56px;
+  --sf-radius: 8px;
+  --sf-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+  /* Sidebar escura */
+  --sf-sidebar-bg: #0f172a;
+  --sf-sidebar-border: #1e293b;
+  --sf-sidebar-brand: #ffffff;
+  --sf-sidebar-text: #cbd5e1;
+  --sf-sidebar-hover-bg: #1e293b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  background: var(--sf-bg);
+  color: var(--sf-text);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+a {
+  color: var(--sf-primary);
+  text-decoration: none;
+}
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+  position: relative;
+}
+
+.app-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.app-content {
+  flex: 1;
+  padding: 24px;
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.app-footer {
+  padding: 12px 24px;
+  border-top: 1px solid var(--sf-border);
+  background: var(--sf-surface);
+  color: var(--sf-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* Cartão de conteúdo usado por todas as páginas (placeholder e dados da API). */
+.page-placeholder {
+  background: var(--sf-surface);
+  border: 1px solid var(--sf-border);
+  border-radius: var(--sf-radius);
+  padding: 16px;
+  box-shadow: var(--sf-shadow);
+  margin-top: 12px;
+}
+
+.page-placeholder h2 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+.page-placeholder h2 + h2,
+.page-placeholder ul + h2 {
+  margin-top: 16px;
+}
+
+.page-placeholder ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.page-placeholder p:first-child:last-child {
+  margin: 0;
+}
+
+.sidebar-overlay {
+  display: none;
+}
+
+@media (min-width: 901px) {
+  .sidebar-overlay {
+    display: none !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    z-index: 40;
+  }
+}
