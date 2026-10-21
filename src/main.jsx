@@ -8,3 +8,12 @@ createRoot(document.getElementById('root')).render(
     <App />
   </React.StrictMode>
 )
+
+// PWA: regista o service worker (so em producao, para nao atrasar o dev).
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+      // Sem service worker a app continua a funcionar, so perde o modo offline.
+    })
+  })
+}

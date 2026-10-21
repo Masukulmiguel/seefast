@@ -20,6 +20,10 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: './src/test/setup.js',
-    include: ['src/**/*.test.{js,jsx}', 'server/**/*.test.js']
+    include: ['src/**/*.test.{js,jsx}', 'server/**/*.test.js', 'scripts/**/*.test.js'],
+    // Cada worker jsdom paga o arranque do jsdom (dezenas de segundos em
+    // maquinas lentas ou com antivirus a analisar). Poucos workers em
+    // paralelo = arranque mais rapido e suite estavel.
+    maxWorkers: 2
   }
 })

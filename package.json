@@ -10,6 +10,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "prebuild": "node scripts/gerar-icones.mjs",
+    "icones": "node scripts/gerar-icones.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "server": "node server/api.js",

@@ -274,6 +274,142 @@ describe("escrita (só admin)", () => {
   });
 });
 
+describe("ingestão de dispositivos", () => {
+  let deviceId = "";
+  let deviceToken = "";
+
+  it("o admin cria um dispositivo e recebe o token uma vez", async () => {
+    const res = await fetch(`${BASE}/api/devices`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ nome: "Telemóvel do Miguel" }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.device.nome).toBe("Telemóvel do Miguel");
+    expect(body.device.token).toBeTruthy();
+    deviceId = body.device.id;
+    deviceToken = body.device.token;
+  });
+
+  it("a listagem de dispositivos nunca expõe o token", async () => {
+    const res = await fetch(`${BASE}/api/devices`, { headers: { Cookie: cookie } });
+    const data = await res.json();
+    const device = data.devices.find((d) => d.id === deviceId);
+    expect(device).toBeDefined();
+    expect(device.token).toBeUndefined();
+    expect(device.token_hash).toBeUndefined();
+  });
+
+  it("sem token de dispositivo a ingestão responde 401", async () => {
+    const res = await fetch(`${BASE}/api/devices/${deviceId}/estado`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ estado: "online", bateria: 55 }),
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("com o token de outro dispositivo a ingestão responde 403", async () => {
+    const res = await fetch(`${BASE}/api/devices/dev-001/estado`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${deviceToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ estado: "online", bateria: 55 }),
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it("o dispositivo reporta o estado e o painel reflecte-o", async () => {
+    const res = await fetch(`${BASE}/api/devices/${deviceId}/estado`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${deviceToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ estado: "online", bateria: 55 }),
+    });
+    expect(res.status).toBe(200);
+    const lista = await fetch(`${BASE}/api/devices`, { headers: { Cookie: cookie } });
+    const data = await lista.json();
+    const device = data.devices.find((d) => d.id === deviceId);
+    expect(device.estado).toBe("online");
+    expect(device.bateria).toBe(55);
+  });
+
+  it("o dispositivo reporta a localização", async () => {
+    const res = await fetch(`${BASE}/api/devices/${deviceId}/localizacao`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${deviceToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ lat: 38.7223, lon: -9.1393, em: "2026-10-21T12:00:00Z" }),
+    });
+    expect(res.status).toBe(200);
+    const lista = await fetch(`${BASE}/api/locations`, { headers: { Cookie: cookie } });
+    const data = await lista.json();
+    const loc = data.locations.find((l) => l.deviceId === deviceId);
+    expect(loc.lat).toBe(38.7223);
+  });
+
+  it("o dispositivo reporta as apps instaladas", async () => {
+    const res = await fetch(`${BASE}/api/devices/${deviceId}/apps`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${deviceToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        apps: [
+          { nome: "TikTok", pacote: "com.zhiliaoapp.musically", tamanhoMb: 78 },
+        ],
+      }),
+    });
+    expect(res.status).toBe(200);
+    const lista = await fetch(`${BASE}/api/apps`, { headers: { Cookie: cookie } });
+    const data = await lista.json();
+    const app = data.apps.find((a) => a.deviceId === deviceId);
+    expect(app.nome).toBe("TikTok");
+  });
+
+  it("o dispositivo reporta o consentimento e as permissões", async () => {
+    const res = await fetch(`${BASE}/api/devices/${deviceId}/consentimento`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${deviceToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        consentimento: "concedido",
+        camera: false,
+        microfone: false,
+        localizacao: true,
+      }),
+    });
+    expect(res.status).toBe(200);
+    const lista = await fetch(`${BASE}/api/permissions`, { headers: { Cookie: cookie } });
+    const data = await lista.json();
+    const perm = data.permissions.find((p) => p.deviceId === deviceId);
+    expect(perm.consentimento).toBe("concedido");
+    expect(perm.localizacao).toBe(true);
+  });
+
+  it("a ingestão de localização valida as coordenadas", async () => {
+    const res = await fetch(`${BASE}/api/devices/${deviceId}/localizacao`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${deviceToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ lat: "abc", lon: "def" }),
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
 describe("coleções da API", () => {
   it.each(collections)("GET %s devolve a coleção %s com dados", async (endpoint, chave) => {
     const res = await fetch(`${BASE}${endpoint}`, { headers: { Cookie: cookie } });

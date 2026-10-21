@@ -37,6 +37,26 @@ por isso o frontend fala com a API sem CORS em desenvolvimento.
 > Nota: o dev server do Vite 8 escuta em `localhost` (IPv6 `::1`) — abra
 > `http://localhost:5173`, não `127.0.0.1:5173`.
 
+### Acessível a partir de um telemóvel (rede local)
+
+```powershell
+$env:SEEFAST_HOST="0.0.0.0"   # a API passa a escutar em toda a rede local
+npm start
+```
+
+A API avisa quando está exposta. Só use isto numa rede de confiança: as
+sessões viajam por HTTP em claro (ver "Limitações conhecidas").
+
+### Instalar no telemóvel (PWA)
+
+O painel é uma PWA: no Chrome/Android, *Menu → Adicionar ao ecrã principal*
+cria um ícone que abre em ecrã inteiro e funciona offline. Os ícones são
+gerados por `npm run icones` (script próprio, sem dependências).
+
+**A PWA não recolhe dados do dispositivo** — para isso existe a app Android
+(ver `docs/superpowers/specs/`), que fala com a API através dos endpoints de
+ingestão.
+
 ## Outros comandos
 
 ```bash
@@ -80,7 +100,12 @@ npm run seed:admin # cria/actualiza um utilizador (admin ou visualizador)
 | `POST /api/login` | `{ email, password }` → cookie de sessão (público) |
 | `POST /api/logout` | termina a sessão |
 | `GET /api/session` | utilizador da sessão actual |
-| `GET /api/devices` | `{ devices: [{ id, nome, estado, bateria }] }` |
+| `GET /api/devices` | `{ devices: [{ id, nome, estado, bateria, ultimo_reporte }] }` |
+| `POST /api/devices` | regista um dispositivo: `{ nome }` → devolve `{ device: { id, nome, token } }` — **admin**, o token só aparece uma vez |
+| `POST /api/devices/:id/estado` | `{ estado, bateria, em }` — **token do dispositivo** |
+| `POST /api/devices/:id/localizacao` | `{ lat, lon, em }` — **token do dispositivo** |
+| `POST /api/devices/:id/apps` | `{ apps: [{ nome, pacote, tamanhoMb }] }` — **token do dispositivo** |
+| `POST /api/devices/:id/consentimento` | `{ consentimento, camera, microfone, localizacao }` — **token do dispositivo** |
 | `GET /api/alerts` | `{ alerts: [{ id, nivel, mensagem, em, reconhecido }] }` — data descendente |
 | `GET /api/locations` | `{ locations: [{ deviceId, nome, lat, lon, atualizadoEm }] }` |
 | `GET /api/parental-rules` | `{ rules: [{ id, deviceId, nome, limiteMinutos, inicio, fim }] }` |
@@ -102,6 +127,27 @@ Pedidos com request-target malformado respondem 400 em vez de derrubar o process
 - A base nasce com os dados de demonstração; `npm run seed:admin` cria o
   primeiro utilizador.
 
+## Dispositivos e ingestão (para a app Android)
+
+- O administrador regista um dispositivo no painel → a API gera um **token**
+  opaco (32 bytes) que é mostrado **uma única vez**. Na base fica só o
+  SHA-256 do token (`devices.token_hash`).
+- A app Android envia esse token em `Authorization: Bearer <token>`.
+- Os endpoints de ingestão autenticam pelo **token do dispositivo** (não pela
+  sessão de humano) e só aceitam o seu próprio `deviceId` (403 caso contrário).
+- A ingestão **nunca altera decisões do administrador**: a app pode reportar
+  que uma app está instalada, mas não pode desbloquear uma app bloqueada.
+
+## Limitações conhecidas
+
+- **Sem HTTPS**: as sessões viajam em claro na rede local. Para uso fora de
+  casa, pôr a API atrás de um proxy com TLS.
+- A API escuta em `127.0.0.1` por omissão; `SEEFAST_HOST=0.0.0.0` expõe-a à
+  rede local.
+- O token do dispositivo é de portador (*bearer*): quem o tiver pode reportar
+  dados desse dispositivo. Em redes partilhadas, prefere tokens por dispositivo
+  revogáveis (campo `token_hash` permite rodar o token).
+
 ## Estrutura
 
 ```
@@ -117,12 +163,19 @@ src/
   test/setup.js            # setup do vitest
   App.test.jsx             # navegação, a11y, sessão, acções de admin
 server/
-  api.js                   # API HTTP (leitura + escrita, auth, auditoria)
+  api.js                   # API HTTP (leitura + escrita, auth, ingestão)
   auth.js                  # scrypt, sessões, cookies
   db.js                    # SQLite: migrations + seed
   seed-admin.js            # cria/actualiza um utilizador
-  migrations/              # 001_init.sql, 002_users_sessions.sql
+  migrations/              # 001_init, 002_users_sessions, 003_ingestao
   *.test.js                # testes de DB, auth e API (processo real)
+scripts/
+  gerar-icones.mjs         # gerador de ícones PNG da PWA (sem dependências)
+  pwa.test.js              # contrato da PWA (manifesto, ícones, SW)
+public/
+  manifest.webmanifest     # manifesto PWA
+  sw.js                    # service worker (nunca cacheia /api)
+  icon-*.png               # ícones gerados
 .github/workflows/ci.yml   # CI: audit + testes + build em cada push/PR
 start.js                   # arranca API + Vite; mata a árvore de processos no fim
 ```
@@ -142,15 +195,18 @@ Testa em Node 22 (última 22.x) e 24.
 
 Feito: shell responsivo, 8 páginas ligadas à API, indicadores no Dashboard,
 ordenação por data, autenticação com papéis, escrita auditada, persistência
-SQLite com migrations, 404, ecrã de login, CI.
+SQLite com migrations, 404, ecrã de login, PWA instalável, ingestão de
+dispositivos (tokens por dispositivo), CI.
 
 Por fazer:
 
+- **App Android** — a app que recolhe dados no telemóvel ainda não existe
+  (spec em `docs/superpowers/specs/`); a API já tem os endpoints de ingestão
+  prontos para ela.
 - **Tempo real** — o estado actualiza-se ao carregar a página (sem polling/SSE).
-- **App Android** — a app SeeFast Android (recolha de dados e consentimento)
-  está fora deste repositório; quando existir, fala com a mesma API.
 - **Perfis finos** — o modelo de permissões é binário (admin/visualizador).
 - **Recuperação de password, 2FA, SSO** — não implementadas.
+- **HTTPS** — a API é para rede local em claro.
 - **Testes end-to-end** — a cobertura actual é jsdom + API real em processo
   separado (não há Playwright).
 
