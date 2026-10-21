@@ -190,6 +190,28 @@ const routes = {
     sendJson(res, 200, { apps: apps.length });
   },
 
+  "POST /api/devices/:id/uso": async (req, res, { params }) => {
+    const corpo = await readJsonBody(req);
+    if (!Array.isArray(corpo.uso)) {
+      sendJson(res, 400, { error: "uso_invalido" });
+      return;
+    }
+    const registadoEm = new Date().toISOString();
+    db.transaction(() => {
+      db.prepare("DELETE FROM usage WHERE device_id = ?").run(params.id);
+      const inserir = db.prepare(
+        "INSERT INTO usage (device_id, pacote, minutos, registado_em) VALUES (?, ?, ?, ?)"
+      );
+      for (const linha of corpo.uso) {
+        const pacote = String(linha.pacote ?? "").trim();
+        const minutos = Number(linha.minutos);
+        if (!pacote || !Number.isFinite(minutos) || minutos < 0) continue;
+        inserir.run(params.id, pacote, Math.round(minutos), registadoEm);
+      }
+    })();
+    sendJson(res, 200, { registos: corpo.uso.length });
+  },
+
   "POST /api/devices/:id/consentimento": async (req, res, { params }) => {
     const corpo = await readJsonBody(req);
     const consentimento =
@@ -243,7 +265,12 @@ const routes = {
     sendJson(res, 200, {
       apps: db
         .prepare(
-          "SELECT id, device_id AS deviceId, nome, pacote, tamanho_mb AS tamanhoMb, bloqueada FROM apps ORDER BY id"
+          `SELECT a.id, a.device_id AS deviceId, a.nome, a.pacote,
+                  a.tamanho_mb AS tamanhoMb, a.bloqueada,
+                  COALESCE(u.minutos, 0) AS minutos
+             FROM apps a
+             LEFT JOIN usage u ON u.device_id = a.device_id AND u.pacote = a.pacote
+            ORDER BY a.id`
         )
         .all()
         .map((a) => ({ ...a, bloqueada: bool(a.bloqueada) })),
@@ -397,6 +424,7 @@ const INGESTAO = new Set([
   "POST /api/devices/:id/estado",
   "POST /api/devices/:id/localizacao",
   "POST /api/devices/:id/apps",
+  "POST /api/devices/:id/uso",
   "POST /api/devices/:id/consentimento",
 ]);
 

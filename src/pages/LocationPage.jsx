@@ -7,6 +7,7 @@ export default function LocationPage() {
       descricao="Consultar a localização dos dispositivos com consentimento ativo."
       endpoint="/api/locations"
       chave="locations"
+      intervaloMs={30000}
       textoACarregar="A carregar localizações…"
       textoVazio="Sem localizações disponíveis — é necessário consentimento ativo."
       aoRenderizarItem={(l) =>

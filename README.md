@@ -105,6 +105,7 @@ npm run seed:admin # cria/actualiza um utilizador (admin ou visualizador)
 | `POST /api/devices/:id/estado` | `{ estado, bateria, em }` — **token do dispositivo** |
 | `POST /api/devices/:id/localizacao` | `{ lat, lon, em }` — **token do dispositivo** |
 | `POST /api/devices/:id/apps` | `{ apps: [{ nome, pacote, tamanhoMb }] }` — **token do dispositivo** |
+| `POST /api/devices/:id/uso` | `{ uso: [{ pacote, minutos }] }` — **token do dispositivo** |
 | `POST /api/devices/:id/consentimento` | `{ consentimento, camera, microfone, localizacao }` — **token do dispositivo** |
 | `GET /api/alerts` | `{ alerts: [{ id, nivel, mensagem, em, reconhecido }] }` — data descendente |
 | `GET /api/locations` | `{ locations: [{ deviceId, nome, lat, lon, atualizadoEm }] }` |
@@ -129,14 +130,17 @@ Pedidos com request-target malformado respondem 400 em vez de derrubar o process
 
 ## Dispositivos e ingestão (para a app Android)
 
-- O administrador regista um dispositivo no painel → a API gera um **token**
-  opaco (32 bytes) que é mostrado **uma única vez**. Na base fica só o
-  SHA-256 do token (`devices.token_hash`).
+- Na página **Dispositivos**, o administrador regista um dispositivo (formulário
+  "Registar dispositivo"). A API gera um **token** opaco (32 bytes) que é
+  mostrado **uma única vez** — a app do telemóvel precisa dele. Na base fica
+  só o SHA-256 do token (`devices.token_hash`).
 - A app Android envia esse token em `Authorization: Bearer <token>`.
 - Os endpoints de ingestão autenticam pelo **token do dispositivo** (não pela
   sessão de humano) e só aceitam o seu próprio `deviceId` (403 caso contrário).
 - A ingestão **nunca altera decisões do administrador**: a app pode reportar
   que uma app está instalada, mas não pode desbloquear uma app bloqueada.
+- O painel actualiza-se sozinho: Dispositivos, Localização, Dashboard e
+  Alertas voltam a perguntar à API (30 s; Aplicações a 60 s).
 
 ## Limitações conhecidas
 
@@ -196,14 +200,17 @@ Testa em Node 22 (última 22.x) e 24.
 Feito: shell responsivo, 8 páginas ligadas à API, indicadores no Dashboard,
 ordenação por data, autenticação com papéis, escrita auditada, persistência
 SQLite com migrations, 404, ecrã de login, PWA instalável, ingestão de
-dispositivos (tokens por dispositivo), CI.
+dispositivos (tokens por dispositivo), registo de dispositivo no painel,
+tempo de uso por app, actualização automática (polling), CI.
 
 Por fazer:
 
 - **App Android** — a app que recolhe dados no telemóvel ainda não existe
   (spec em `docs/superpowers/specs/`); a API já tem os endpoints de ingestão
   prontos para ela.
-- **Tempo real** — o estado actualiza-se ao carregar a página (sem polling/SSE).
+- **Rotação/revogação de token e apagar dispositivo** — hoje o token antigo
+  continua válido e os dispositivos órfãos ficam no painel.
+- **Retenção de dados** — o servidor não apaga nada automaticamente.
 - **Perfis finos** — o modelo de permissões é binário (admin/visualizador).
 - **Recuperação de password, 2FA, SSO** — não implementadas.
 - **HTTPS** — a API é para rede local em claro.

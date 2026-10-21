@@ -408,6 +408,58 @@ describe("ingestão de dispositivos", () => {
     });
     expect(res.status).toBe(400);
   });
+
+  it("o dispositivo reporta o tempo de uso das apps", async () => {
+    const res = await fetch(`${BASE}/api/devices/${deviceId}/uso`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${deviceToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        uso: [{ pacote: "com.zhiliaoapp.musically", minutos: 145 }],
+      }),
+    });
+    expect(res.status).toBe(200);
+
+    const lista = await fetch(`${BASE}/api/apps`, { headers: { Cookie: cookie } });
+    const data = await lista.json();
+    const app = data.apps.find(
+      (a) => a.deviceId === deviceId && a.pacote === "com.zhiliaoapp.musically"
+    );
+    expect(app.minutos).toBe(145);
+  });
+
+  it("o tempo de uso substitui o reporte anterior do dispositivo", async () => {
+    await fetch(`${BASE}/api/devices/${deviceId}/uso`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${deviceToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        uso: [{ pacote: "com.zhiliaoapp.musically", minutos: 30 }],
+      }),
+    });
+    const lista = await fetch(`${BASE}/api/apps`, { headers: { Cookie: cookie } });
+    const data = await lista.json();
+    const app = data.apps.find(
+      (a) => a.deviceId === deviceId && a.pacote === "com.zhiliaoapp.musically"
+    );
+    expect(app.minutos).toBe(30);
+  });
+
+  it("um payload de uso inválido responde 400", async () => {
+    const res = await fetch(`${BASE}/api/devices/${deviceId}/uso`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${deviceToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ uso: "isto nao e uma lista" }),
+    });
+    expect(res.status).toBe(400);
+  });
 });
 
 describe("coleções da API", () => {

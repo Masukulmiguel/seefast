@@ -2,8 +2,12 @@ import { useApiCollection } from "../lib/useApiCollection.js";
 import { sortByDateDesc } from "../lib/dates.js";
 
 export default function Dashboard() {
-  const dispositivos = useApiCollection("/api/devices", "devices");
-  const alertas = useApiCollection("/api/alerts", "alerts");
+  const dispositivos = useApiCollection("/api/devices", "devices", {
+    intervaloMs: 30000,
+  });
+  const alertas = useApiCollection("/api/alerts", "alerts", {
+    intervaloMs: 30000,
+  });
 
   const status =
     dispositivos.status === "error" || alertas.status === "error"

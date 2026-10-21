@@ -27,6 +27,7 @@ export default function Alerts() {
         endpoint="/api/alerts"
         chave="alerts"
         ordenar={sortByDateDesc}
+        intervaloMs={30000}
         textoACarregar="A carregar alertas…"
         textoVazio="Sem alertas ativos."
         aoRenderizarItem={(alerta, { recarregar }) => (

@@ -184,6 +184,48 @@ a {
   cursor: progress;
 }
 
+/* Registo de um dispositivo (admin) e aviso de token unico. */
+.registo-dispositivo {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.registo-dispositivo label {
+  font-size: 12px;
+  color: var(--sf-muted);
+}
+
+.registo-dispositivo input {
+  padding: 8px 10px;
+  border: 1px solid var(--sf-border);
+  border-radius: 6px;
+  font: inherit;
+  background: var(--sf-bg);
+  color: var(--sf-text);
+  min-width: 220px;
+}
+
+.registo-dispositivo button {
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--sf-primary);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.registo-dispositivo button:hover {
+  background: var(--sf-primary-dark);
+}
+
+.aviso {
+  color: var(--sf-warning);
+  font-size: 13px;
+}
+
 /* Linhas de lista com acções (bloquear app, reconhecer alerta, editar regra). */
 .linha {
   display: flex;

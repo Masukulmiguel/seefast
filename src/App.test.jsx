@@ -313,6 +313,97 @@ describe("acções de administrador", () => {
   });
 });
 
+describe("dispositivos e tempo real", () => {
+  it("a página de Aplicações mostra o tempo de uso", async () => {
+    vi.stubGlobal(
+      "fetch",
+      comSessao(async () => ({
+        ok: true,
+        json: async () => ({
+          apps: [
+            { id: "app-001", deviceId: "dev-001", nome: "Instagram", pacote: "com.instagram.android", tamanhoMb: 45, bloqueada: false, minutos: 145 },
+          ],
+        }),
+      }))
+    );
+    go("/aplicacoes");
+    render(<App />);
+    expect(await screen.findByText(/145 min/)).toBeInTheDocument();
+  });
+
+  it("o admin regista um dispositivo e vê o token uma única vez", async () => {
+    const chamadas = [];
+    vi.stubGlobal(
+      "fetch",
+      comSessao(async (url, opts) => {
+        if (opts?.method === "POST" && String(url).endsWith("/api/devices")) {
+          chamadas.push({ url: String(url), corpo: JSON.parse(opts.body) });
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              device: { id: "dev-abc123", nome: "Telemóvel do Miguel", token: "tok-secreto-123" },
+            }),
+          };
+        }
+        return { ok: true, json: async () => ({ devices: [] }) };
+      })
+    );
+    go("/dispositivos");
+    render(<App />);
+    fireEvent.change(await screen.findByLabelText(/nome do dispositivo/i), {
+      target: { value: "Telemóvel do Miguel" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /registar dispositivo/i }));
+    expect(await screen.findByText(/tok-secreto-123/)).toBeInTheDocument();
+    expect(screen.getByText(/só aparece uma vez/i)).toBeInTheDocument();
+    expect(chamadas[0].corpo).toEqual({ nome: "Telemóvel do Miguel" });
+  });
+
+  it("um visualizador não vê o formulário de registo de dispositivo", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url) => {
+        if (String(url) === "/api/session") {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              user: { id: "u2", email: "visor@seefast", role: "visualizador" },
+            }),
+          };
+        }
+        return { ok: true, json: async () => ({ devices: [] }) };
+      })
+    );
+    go("/dispositivos");
+    render(<App />);
+    await screen.findByRole("heading", { level: 1, name: "Dispositivos" });
+    expect(
+      screen.queryByRole("button", { name: /registar dispositivo/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it("a página de Dispositivos volta a perguntar à API periodicamente", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const chamadas = [];
+    vi.stubGlobal(
+      "fetch",
+      comSessao(async (url) => {
+        if (String(url) !== "/api/session") chamadas.push(String(url));
+        return { ok: true, json: async () => ({ devices: [] }) };
+      })
+    );
+    go("/dispositivos");
+    render(<App />);
+    await vi.waitFor(() => expect(chamadas.length).toBeGreaterThan(0));
+    const inicial = chamadas.length;
+    await vi.advanceTimersByTimeAsync(31000);
+    expect(chamadas.length).toBeGreaterThan(inicial);
+    vi.useRealTimers();
+  });
+});
+
 describe("navegação", () => {
   it.each(routes)("a rota $path renderiza a página $heading", async ({ path, heading }) => {
     go(path);

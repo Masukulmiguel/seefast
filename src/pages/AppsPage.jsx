@@ -29,12 +29,14 @@ export default function AppsPage() {
         descricao="Aplicações instaladas e políticas de acesso."
         endpoint="/api/apps"
         chave="apps"
+        intervaloMs={60000}
         textoACarregar="A carregar aplicações…"
         textoVazio="Sem aplicações registadas nos dispositivos."
         aoRenderizarItem={(app, { recarregar }) => (
           <span className="linha">
             <span className="linha-texto">
-              {app.nome} — {app.pacote}, {app.tamanhoMb} MB (
+              {app.nome} — {app.pacote}, {app.tamanhoMb} MB
+              {app.minutos > 0 && `, ${app.minutos} min`} (
               {app.bloqueada ? "bloqueada" : "permitida"})
             </span>
             {podeEditar && (

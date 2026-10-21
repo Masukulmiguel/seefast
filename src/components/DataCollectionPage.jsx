@@ -8,16 +8,21 @@ export default function DataCollectionPage({
   chave,
   aoRenderizarItem,
   ordenar,
+  intervaloMs = 0,
+  cabecalho = null,
   textoVazio = "Não há dados para mostrar.",
   textoACarregar = "A carregar…",
 }) {
-  const { status, items, recarregar } = useApiCollection(endpoint, chave);
+  const { status, items, recarregar } = useApiCollection(endpoint, chave, {
+    intervaloMs,
+  });
   const lista = ordenar ? ordenar(items) : items;
 
   return (
     <section>
       <h1>{titulo}</h1>
       <p>{descricao}</p>
+      {cabecalho}
 
       {status === "loading" && (
         <div className="page-placeholder">
