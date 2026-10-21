@@ -5,7 +5,8 @@ React + Vite no frontend, API HTTP em Node com SQLite no backend.
 
 ## Requisitos
 
-- Node.js 20.19+, 22.12+ ou 24 (o Vite 8 impõe estes mínimos)
+- Node.js 22.19+ ou 24 (`undici` 8, dependência do vitest, exige `>=22.19`;
+  o `engines` no `package.json`declara isto). O CI corre em Node 22 e 24.
 - npm
 
 ## Arranque
@@ -135,7 +136,7 @@ start.js                   # arranca API + Vite; mata a árvore de processos no 
 3. `npm test`
 4. `npm run build`
 
-Testa em Node 22.12 e 24.
+Testa em Node 22 (última 22.x) e 24.
 
 ## Estado
 

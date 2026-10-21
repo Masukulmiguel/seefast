@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "description": "SeeFast - painel web de supervisao de dispositivos com consentimento explicito (MVP)",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",

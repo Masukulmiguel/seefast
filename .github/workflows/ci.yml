@@ -12,8 +12,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # vite 8 exige Node ^20.19 || >=22.12
-        node-version: [22.12, 24]
+        # undici 8 (dependencia do vitest) exige Node >= 22.19.
+        # "22" resolve para a ultima 22.x (sempre >= 22.19).
+        node-version: [22, 24]
 
     steps:
       - uses: actions/checkout@v4
