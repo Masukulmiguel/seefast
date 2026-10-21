@@ -321,29 +321,70 @@ estrutura de pastas e o processo de build/keystore. Copia-se o ficheiro
     estiver activo, com `dataSync|location` e re-declaracao do tipo quando as
     permissoes mudam.
 
-## 15. Perguntas em aberto (so tu podes responder; mudam o que se constroi)
+## 15. Decisoes do utilizador (respostas) e o que ainda falta
 
-1. **Onde vai correr a API?** Na tua maquina em casa (LAN) ou num servidor com
-   dominio/HTTPS? Muda: a necessidade de TLS, o `network_security_config`, se
-   o sideload chega (se o servidor esta na internet, a app precisa de HTTPS
-   para transportar o token) e se a fila offline e feature ou caso de nicho.
-2. **Sideload so, ou Play Store?** Sideload e trivial. Play Store exige
-   declarar o uso de `PACKAGE_USAGE_STATS`, respeitar as politicas de
-   "supervisao familiar" (indicador visivel obrigatorio) e passar por revisao.
-3. **Tempo de uso no MVP?** Hoje a API **nao tem endpoint** para isso: ou
-   sai do ambito (M3 fica so com apps instaladas), ou o servidor ganha uma
-   migration + endpoint + a pagina de Aplicacoes mostra os minutos.
-4. **UI de registo de dispositivo no painel entra no ambito?** Sem ela, o
-   `id` + `token` obtem-se por `curl POST /api/devices` (a spec assume que o
-   administrador regista o dispositivo no painel).
-5. **Tempo real (polling) no painel?** Hoje nao ha: o estado so actualiza ao
-   recarregar a pagina. Entra no ambito (polling nas paginas de Dispositivos e
-   Localizacao) ou os criterios de aceitacao ficam "apos recarregar"?
-6. **Retencao de dados no servidor?** Quantos dias/meses se guardam os
-   reportes? (O painel hoje nao apaga nada sozinho.)
-7. **Nome e package id definitivos** - `SeeFast Agente` / `pt.seefast.agent`
-   serve? (decisao minha, confirmar so).
-## 16. Fora do âmbito (para o builder decidir)
+**Respostas (2026-10-21):**
+
+1. **Onde corre a API: os dois.** LAN em desenvolvimento, internet em producao.
+   Consequencias na app: o `baseUrl` e configuravel e o `network_security_config`
+   permite cleartext **apenas** em gamas privadas (`10/8`, `172.16/12`,
+   `192.168/16`); qualquer outro endereco exige **HTTPS**. A app nao valida o
+   esquema — segue o que o utilizador escreve — mas o aviso de "sem TLS" e
+   mostrado quando o endereco nao e `localhost` nem uma gama privada.
+2. **Distribuicao: Play Store**, com as politicas de supervisao familiar.
+   Consequencias (ver §17): `targetSdk` tem de subir para 35/36, Play App
+   Signing, ficha de "Data safety", politica de privacidade publicada, e
+   declaracao do uso de `PACKAGE_USAGE_STATS` e de `QUERY_ALL_PACKAGES`.
+3. **Tempo de uso entra no MVP.** Consequencia: o servidor ganha migration +
+   endpoint de ingestao de uso, e a pagina de Aplicacoes do painel passa a
+   mostrar os minutos por app. (Trabalho no painel, ver §6.)
+
+**Ainda por decidir (mudan o plano, nao bloqueiam o M0):**
+
+4. UI de registo de dispositivo no painel - decide-se na implementacao do
+   painel (recomendacao: sim, e simples).
+5. Tempo real (polling) no painel - decide-se na implementacao do painel
+   (recomendacao: polling de 30 s nas paginas de Dispositivos e Localizacao).
+6. Retencao de dados no servidor - por omissao, sem apagamento automatico
+   (o painel passa a mostrar a data do ultimo reporte).
+## 16. Requisitos da Play Store (distribuicao escolhida: Play Store)
+
+Publicar na Play Store com politicas de supervisao familiar acrescenta
+requisitos que a versao sideload nao tem. A app foi desenhada para os
+cumprir, mas o trabalho e real:
+
+**Cumprir as politicas (obrigatorio)**
+- **Families Policy**: a app recolhe dados de menores, logo tem de declarar a
+  categoria certa, ter politica de privacidade publicada e um ecrã de consentimento
+  que verifique o consentimento de um adulto.
+- **Background location**: so e permitida para "core functionality" de uma app
+  de supervisao parental, com consentimento e indicador visivel. A nossa app
+  usa servico em primeiro plano com notificacao permanente - o indicador
+  visivel que a politica exige.
+- **PACKAGE_USAGE_STATS**: exige declaracao no Play Console. Como a app recolhe
+  tempo de uso (decisao do utilizador), esta e a permissao mais sensivel do
+  conjunto - o ecra de consentimento tem de a explicar por extenso.
+- **QUERY_ALL_PACKAGES**: restrita; ha uma declaracao para apps de gestao de
+  dispositivos/supervisao parental.
+- **Proibido**: AccessibilityService para vigilancia, injecao de toques, leitura
+  de SMS, camara/microfone ocultos. A app ja nao usa nenhum deles (§3).
+- **Data safety form**: preencher com o que a app recolhe e com que finalidade.
+
+**Tecnico**
+- **`targetSdk` 35 ou 36** (a Play exige target API recente para actualizacoes
+  de apps). O esqueleto do EndpointX usa `targetSdk 34` - tem de subir.
+- **Play App Signing**: gera-se uma chave de upload; a chave de assinatura da
+  app e gerida pela Play. (ParaSideload directo, a chave tem de ser nossa.)
+- **Versionamento**: `versionCode` tem de subir a cada upload; `versionName`
+  legivel.
+- **Ficha da loja**: capturas de ecra, descricao, categoria, palavras-chave.
+
+**O que a Play Store NAO resolve**
+- A API de producao tem de estar em HTTPS com dominio proprio (a Play exige
+  HTTPS para apps que tratam dados de criancas, e o sideload passa a exigir
+  dominio + certificado).
+
+## 17. Fora do âmbito (para o builder decidir)
 
 - Tema claro/escuro, material 3, animações.
 - Widgets de ecrã principal.
