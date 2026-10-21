@@ -1,11 +1,19 @@
+import DataCollectionPage from "../components/DataCollectionPage.jsx";
+
 export default function AppsPage() {
   return (
-    <section>
-      <h1>Aplicações</h1>
-      <p>Aplicações instaladas e políticas de acesso.</p>
-      <div className="page-placeholder">
-        <p>O inventário de aplicações será carregado a partir dos dispositivos ligados.</p>
-      </div>
-    </section>
+    <DataCollectionPage
+      titulo="Aplicações"
+      descricao="Aplicações instaladas e políticas de acesso."
+      endpoint="/api/apps"
+      chave="apps"
+      textoACarregar="A carregar aplicações…"
+      textoVazio="Sem aplicações registadas nos dispositivos."
+      aoRenderizarItem={(a) =>
+        `${a.nome} — ${a.pacote}, ${a.tamanhoMb} MB (${
+          a.bloqueada ? "bloqueada" : "permitida"
+        })`
+      }
+    />
   );
 }

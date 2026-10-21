@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, within, waitFor } from "@testing-library/react";
 import App from "./App.jsx";
 
 // Tabela literal derivada do plano (path, heading do h1, nome do link).
@@ -177,5 +177,113 @@ describe("ligação à API", () => {
     expect(
       await screen.findByText(/não foi possível carregar/i)
     ).toBeInTheDocument();
+  });
+
+  it("o Dashboard mostra os indicadores de estado", async () => {
+    const devices = {
+      devices: [
+        { id: "d1", nome: "Tablet", estado: "online", bateria: 100 },
+        { id: "d2", nome: "Telemóvel", estado: "offline", bateria: 50 },
+        { id: "d3", nome: "Portátil", estado: "online", bateria: 0 },
+      ],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url) => ({
+        ok: true,
+        json: async () =>
+          String(url).includes("devices") ? devices : alertsPayload,
+      }))
+    );
+    go("/");
+    const { container } = render(<App />);
+    await waitFor(() =>
+      expect(container.querySelector(".stat-row")).not.toBeNull()
+    );
+    const stats = within(container.querySelector(".stat-row"));
+    expect(stats.getByText("Dispositivos")).toBeInTheDocument();
+    expect(stats.getByText("3")).toBeInTheDocument();
+    expect(stats.getByText("Online")).toBeInTheDocument();
+    expect(stats.getByText("2")).toBeInTheDocument();
+    expect(stats.getByText("Bateria média")).toBeInTheDocument();
+    expect(stats.getByText("50%")).toBeInTheDocument();
+    expect(stats.getByText("Alertas")).toBeInTheDocument();
+  });
+
+  it("a página de Alertas mostra primeiro o alerta mais recente", async () => {
+    const alerts = {
+      alerts: [
+        { id: "a1", nivel: "warning", mensagem: "Alerta antigo", em: "2026-10-19T09:00:00Z" },
+        { id: "a2", nivel: "critical", mensagem: "Alerta recente", em: "2026-10-21T09:00:00Z" },
+      ],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => alerts }))
+    );
+    go("/alertas");
+    render(<App />);
+    const items = await screen.findAllByRole("listitem");
+    expect(items[0]).toHaveTextContent(/Alerta recente/);
+    expect(items[1]).toHaveTextContent(/Alerta antigo/);
+  });
+
+  // Cada página tem a sua coleção e o seu formato de linha.
+  const paginasApi = [
+    {
+      path: "/localizacao",
+      texto: /38\.7223/,
+      payload: {
+        locations: [
+          { deviceId: "dev-001", nome: "Telemóvel da Ana", lat: 38.7223, lon: -9.1393, atualizadoEm: "2026-10-21T08:00:00Z" },
+        ],
+      },
+    },
+    {
+      path: "/controlo-parental",
+      texto: /120 min/,
+      payload: {
+        rules: [
+          { id: "reg-001", deviceId: "dev-001", nome: "Telemóvel da Ana", limiteMinutos: 120, inicio: "20:00", fim: "22:00" },
+        ],
+      },
+    },
+    {
+      path: "/aplicacoes",
+      texto: /Instagram/,
+      payload: {
+        apps: [
+          { id: "app-001", deviceId: "dev-001", nome: "Instagram", pacote: "com.instagram.android", tamanhoMb: 45, bloqueada: true },
+        ],
+      },
+    },
+    {
+      path: "/permissoes",
+      texto: /consentimento concedido/,
+      payload: {
+        permissions: [
+          { deviceId: "dev-001", nome: "Telemóvel da Ana", consentimento: "concedido", camera: false, microfone: false, localizacao: true },
+        ],
+      },
+    },
+    {
+      path: "/auditoria",
+      texto: /atualizou limite de ecrã/,
+      payload: {
+        entries: [
+          { id: "aud-001", em: "2026-10-21T07:45:00Z", ator: "admin@seefast", acao: "atualizou limite de ecrã", alvo: "dev-001" },
+        ],
+      },
+    },
+  ];
+
+  it.each(paginasApi)("a página $path mostra os dados da API", async ({ path, payload, texto }) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => payload }))
+    );
+    go(path);
+    render(<App />);
+    expect(await screen.findByText(texto)).toBeInTheDocument();
   });
 });

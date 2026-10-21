@@ -82,9 +82,38 @@ a {
   text-align: center;
 }
 
-/* Cartão de conteúdo usado por todas as páginas (placeholder e dados da API). */
-.page-placeholder {
+/* Indicadores de estado (Dashboard). */
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin: 12px 0 0;
+}
+
+.stat {
   background: var(--sf-surface);
+  border: 1px solid var(--sf-border);
+  border-radius: var(--sf-radius);
+  padding: 12px 16px;
+  box-shadow: var(--sf-shadow);
+}
+
+.stat dt {
+  font-size: 12px;
+  color: var(--sf-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.stat dd {
+  margin: 4px 0 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--sf-text);
+}
+
+/* Cartão de conteúdo usado por todas as páginas (placeholder e dados da API). */
+.page-placeholder {  background: var(--sf-surface);
   border: 1px solid var(--sf-border);
   border-radius: var(--sf-radius);
   padding: 16px;

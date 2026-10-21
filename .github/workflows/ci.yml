@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # vite 8 exige Node ^20.19 || >=22.12
+        node-version: [22.12, 24]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Audit (falha em high/critical)
+        run: npm audit --audit-level=high
+
+      - name: Testes
+        run: npm test
+
+      - name: Build
+        run: npm run build

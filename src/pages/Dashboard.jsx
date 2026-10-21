@@ -1,38 +1,27 @@
-import { useEffect, useState } from "react";
+import { useApiCollection } from "../lib/useApiCollection.js";
+import { sortByDateDesc } from "../lib/dates.js";
 
 export default function Dashboard() {
-  const [status, setStatus] = useState("loading");
-  const [devices, setDevices] = useState([]);
-  const [alerts, setAlerts] = useState([]);
+  const dispositivos = useApiCollection("/api/devices", "devices");
+  const alertas = useApiCollection("/api/alerts", "alerts");
 
-  useEffect(() => {
-    let cancelled = false;
+  const status =
+    dispositivos.status === "error" || alertas.status === "error"
+      ? "error"
+      : dispositivos.status === "ready" && alertas.status === "ready"
+        ? "ready"
+        : "loading";
 
-    async function load() {
-      try {
-        const [devicesRes, alertsRes] = await Promise.all([
-          fetch("/api/devices"),
-          fetch("/api/alerts"),
-        ]);
-        if (!devicesRes.ok || !alertsRes.ok) {
-          throw new Error(`HTTP ${devicesRes.status}/${alertsRes.status}`);
-        }
-        const devicesData = await devicesRes.json();
-        const alertsData = await alertsRes.json();
-        if (cancelled) return;
-        setDevices(Array.isArray(devicesData.devices) ? devicesData.devices : []);
-        setAlerts(Array.isArray(alertsData.alerts) ? alertsData.alerts : []);
-        setStatus("ready");
-      } catch {
-        if (!cancelled) setStatus("error");
-      }
-    }
-
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const devices = dispositivos.items;
+  const alerts = alertas.items;
+  const online = devices.filter((d) => d.estado === "online").length;
+  const avgBattery = devices.length
+    ? Math.round(
+        devices.reduce((total, d) => total + (Number(d.bateria) || 0), 0) /
+          devices.length
+      )
+    : 0;
+  const recentAlerts = sortByDateDesc(alerts);
 
   return (
     <section>
@@ -55,22 +44,43 @@ export default function Dashboard() {
       )}
 
       {status === "ready" && (
-        <div className="page-placeholder">
-          <h2>Dispositivos ({devices.length})</h2>
-          <ul>
-            {devices.map((d) => (
-              <li key={d.id}>
-                {d.nome} — {d.estado}, bateria {d.bateria}%
-              </li>
-            ))}
-          </ul>
-          <h2>Alertas ({alerts.length})</h2>
-          <ul>
-            {alerts.map((a) => (
-              <li key={a.id}>{a.mensagem}</li>
-            ))}
-          </ul>
-        </div>
+        <>
+          <dl className="stat-row">
+            <div className="stat">
+              <dt>Dispositivos</dt>
+              <dd>{devices.length}</dd>
+            </div>
+            <div className="stat">
+              <dt>Online</dt>
+              <dd>{online}</dd>
+            </div>
+            <div className="stat">
+              <dt>Bateria média</dt>
+              <dd>{avgBattery}%</dd>
+            </div>
+            <div className="stat">
+              <dt>Alertas</dt>
+              <dd>{alerts.length}</dd>
+            </div>
+          </dl>
+
+          <div className="page-placeholder">
+            <h2>Dispositivos ({devices.length})</h2>
+            <ul>
+              {devices.map((d) => (
+                <li key={d.id}>
+                  {d.nome} — {d.estado}, bateria {d.bateria}%
+                </li>
+              ))}
+            </ul>
+            <h2>Alertas ({recentAlerts.length})</h2>
+            <ul>
+              {recentAlerts.map((a) => (
+                <li key={a.id}>{a.mensagem}</li>
+              ))}
+            </ul>
+          </div>
+        </>
       )}
     </section>
   );

@@ -57,6 +57,17 @@ function rawRequest(payload) {
   });
 }
 
+// Coleções expostas pela API: endpoint -> chave do payload.
+const collections = [
+  ["/api/devices", "devices"],
+  ["/api/alerts", "alerts"],
+  ["/api/locations", "locations"],
+  ["/api/parental-rules", "rules"],
+  ["/api/apps", "apps"],
+  ["/api/permissions", "permissions"],
+  ["/api/audit", "entries"],
+];
+
 describe("server/api.js", () => {
   it("OPTIONS anuncia apenas os métodos suportados (GET)", async () => {
     const res = await fetch(`http://127.0.0.1:${PORT}/api/health`, {
@@ -65,6 +76,24 @@ describe("server/api.js", () => {
     expect(res.headers.get("access-control-allow-methods")).toBe("GET,OPTIONS");
   });
 
+  it.each(collections)("GET %s devolve a coleção %s com dados", async (endpoint, chave) => {
+    const res = await fetch(`http://127.0.0.1:${PORT}${endpoint}`);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(Array.isArray(data[chave])).toBe(true);
+    expect(data[chave].length).toBeGreaterThan(0);
+  });
+
+  it("GET /api/alerts devolve os alertas mais recentes primeiro", async () => {
+    const res = await fetch(`http://127.0.0.1:${PORT}/api/alerts`);
+    const data = await res.json();
+    expect(data.alerts.length).toBeGreaterThan(1);
+    const datas = data.alerts.map((a) => Date.parse(a.em));
+    expect(datas).toEqual([...datas].sort((a, b) => b - a));
+  });
+
+  // Este é o último teste: um request malformado derruba o processo, por isso
+  // tem de correr depois de todos os outros.
   it("request-target malformado responde 400 em vez de rebentar o processo", async () => {
     const raw = await rawRequest(
       "GET http://% HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"

@@ -1,11 +1,23 @@
+import DataCollectionPage from "../components/DataCollectionPage.jsx";
+
 export default function Permissions() {
   return (
-    <section>
-      <h1>Permissões</h1>
-      <p>Consentimentos e permissões concedidas pelos utilizadores.</p>
-      <div className="page-placeholder">
-        <p>O estado de consentimento de cada dispositivo será mostrado aqui.</p>
-      </div>
-    </section>
+    <DataCollectionPage
+      titulo="Permissões"
+      descricao="Consentimentos e permissões concedidas pelos utilizadores."
+      endpoint="/api/permissions"
+      chave="permissions"
+      textoACarregar="A carregar permissões…"
+      textoVazio="Sem registos de consentimento."
+      aoRenderizarItem={(p) => {
+        const consentimento =
+          p.consentimento === "concedido" ? "concedido" : "pendente";
+        return `${p.nome} — consentimento ${consentimento}, câmara ${
+          p.camera ? "permitida" : "negada"
+        }, microfone ${p.microfone ? "permitido" : "negado"}, localização ${
+          p.localizacao ? "permitida" : "negada"
+        }`;
+      }}
+    />
   );
 }

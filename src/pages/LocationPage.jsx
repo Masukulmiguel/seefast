@@ -1,11 +1,17 @@
+import DataCollectionPage from "../components/DataCollectionPage.jsx";
+
 export default function LocationPage() {
   return (
-    <section>
-      <h1>Localização</h1>
-      <p>Consultar a localização dos dispositivos com consentimento ativo.</p>
-      <div className="page-placeholder">
-        <p>O mapa de localização será apresentado quando o consentimento estiver ativo.</p>
-      </div>
-    </section>
+    <DataCollectionPage
+      titulo="Localização"
+      descricao="Consultar a localização dos dispositivos com consentimento ativo."
+      endpoint="/api/locations"
+      chave="locations"
+      textoACarregar="A carregar localizações…"
+      textoVazio="Sem localizações disponíveis — é necessário consentimento ativo."
+      aoRenderizarItem={(l) =>
+        `${l.nome} — ${l.lat}, ${l.lon} (atualizado em ${l.atualizadoEm})`
+      }
+    />
   );
 }
