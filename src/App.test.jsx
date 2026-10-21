@@ -27,8 +27,25 @@ const alertsPayload = {
   ],
 };
 
+const UTILIZADOR = { id: "u1", email: "ana@seefast", role: "admin" };
+
 function go(path) {
   window.history.pushState({}, "", path);
+}
+
+// Envolve um mock da API de dados de forma a responder à sessão com um
+// utilizador autenticado (o painel só aparece depois de /api/session).
+function comSessao(mock) {
+  return vi.fn(async (url, opts) => {
+    if (String(url) === "/api/session") {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ user: UTILIZADOR }),
+      };
+    }
+    return mock(url, opts);
+  });
 }
 
 // Controla o viewport: jsdom não avalia media queries.
@@ -50,8 +67,17 @@ function mockViewport({ desktop }) {
 }
 
 beforeEach(() => {
-  // Por omissão a API não responde: pendente para não gerar updates assíncronos.
-  vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
+  // Por omissão há sessão iniciada e a API de dados não responde (pendente),
+  // para não gerar updates assíncronos.
+  vi.stubGlobal(
+    "fetch",
+    comSessao(async (url) => {
+      if (String(url) === "/api/logout") {
+        return { ok: true, status: 204, json: async () => ({}) };
+      }
+      return new Promise(() => {});
+    })
+  );
 });
 
 afterEach(() => {
@@ -60,20 +86,249 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("navegação", () => {
-  it.each(routes)("a rota $path renderiza a página $heading", ({ path, heading }) => {
-    go(path);
+describe("sessão", () => {
+  it("sem sessão válida mostra o formulário de login", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url) => {
+        if (String(url) === "/api/session") {
+          return { ok: false, status: 401, json: async () => ({ error: "nao_autenticado" }) };
+        }
+        return new Promise(() => {});
+      })
+    );
+    go("/");
     render(<App />);
-    expect(screen.getByRole("heading", { level: 1, name: heading })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Entrar" })
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Email")).toBeInTheDocument();
+    expect(screen.getByLabelText("Password")).toBeInTheDocument();
   });
 
-  it.each(routes)("o link $label aponta para $path", ({ path, label }) => {
+  it("com sessão válida mostra o painel", async () => {
+    go("/");
+    render(<App />);
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Dashboard" })
+    ).toBeInTheDocument();
+  });
+
+  it("login com credenciais válidas entra no painel", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url) => {
+        if (String(url) === "/api/session") {
+          return { ok: false, status: 401, json: async () => ({}) };
+        }
+        if (String(url) === "/api/login") {
+          return { ok: true, status: 200, json: async () => ({ user: UTILIZADOR }) };
+        }
+        return new Promise(() => {});
+      })
+    );
+    go("/");
+    render(<App />);
+    await screen.findByRole("heading", { level: 1, name: "Entrar" });
+    fireEvent.change(screen.getByLabelText("Email"), {
+      target: { value: "ana@seefast" },
+    });
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "segredo123" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Entrar" }));
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Dashboard" })
+    ).toBeInTheDocument();
+  });
+
+  it("login inválido mostra mensagem de erro", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url) => {
+        if (String(url) === "/api/session") {
+          return { ok: false, status: 401, json: async () => ({}) };
+        }
+        if (String(url) === "/api/login") {
+          return { ok: false, status: 401, json: async () => ({ error: "credenciais_invalidas" }) };
+        }
+        return new Promise(() => {});
+      })
+    );
+    go("/");
+    render(<App />);
+    await screen.findByRole("heading", { level: 1, name: "Entrar" });
+    fireEvent.change(screen.getByLabelText("Email"), {
+      target: { value: "ana@seefast" },
+    });
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "errada" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Entrar" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/incorretos/i);
+  });
+
+  it("o botão Sair volta ao ecrã de login", async () => {
+    go("/");
+    render(<App />);
+    await screen.findByRole("heading", { level: 1, name: "Dashboard" });
+    fireEvent.click(screen.getByRole("button", { name: "Sair", hidden: true }));
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Entrar" })
+    ).toBeInTheDocument();
+  });
+});
+
+describe("acções de administrador", () => {
+  it("o admin pode bloquear uma aplicação", async () => {
+    const chamadas = [];
+    vi.stubGlobal(
+      "fetch",
+      comSessao(async (url, opts) => {
+        if (String(url).includes("/api/apps/")) {
+          chamadas.push({
+            url: String(url),
+            metodo: opts?.method,
+            corpo: JSON.parse(opts.body),
+          });
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ app: { id: "app-001", bloqueada: true } }),
+          };
+        }
+        return {
+          ok: true,
+          json: async () => ({
+            apps: [
+              { id: "app-001", deviceId: "dev-001", nome: "Instagram", pacote: "com.instagram.android", tamanhoMb: 45, bloqueada: false },
+            ],
+          }),
+        };
+      })
+    );
+    go("/aplicacoes");
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Bloquear" }));
+    await waitFor(() => expect(chamadas).toHaveLength(1));
+    expect(chamadas[0].metodo).toBe("PATCH");
+    expect(chamadas[0].corpo).toEqual({ bloqueada: true });
+  });
+
+  it("um visualizador não vê os botões de escrita", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url) => {
+        if (String(url) === "/api/session") {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              user: { id: "u2", email: "visor@seefast", role: "visualizador" },
+            }),
+          };
+        }
+        return {
+          ok: true,
+          json: async () => ({
+            apps: [
+              { id: "app-001", deviceId: "dev-001", nome: "Instagram", pacote: "com.instagram.android", tamanhoMb: 45, bloqueada: false },
+            ],
+          }),
+        };
+      })
+    );
+    go("/aplicacoes");
+    render(<App />);
+    await screen.findByText(/Instagram/);
+    expect(
+      screen.queryByRole("button", { name: "Bloquear" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("o admin pode reconhecer um alerta", async () => {
+    const chamadas = [];
+    vi.stubGlobal(
+      "fetch",
+      comSessao(async (url, opts) => {
+        if (String(url).includes("/ack")) {
+          chamadas.push({ url: String(url), metodo: opts?.method });
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ alert: { id: "alt-001", reconhecido: true } }),
+          };
+        }
+        return {
+          ok: true,
+          json: async () => ({
+            alerts: [
+              { id: "alt-001", nivel: "warning", mensagem: "Dispositivo dev-002 sem ligação", em: "2026-10-20T09:00:00Z", reconhecido: false },
+            ],
+          }),
+        };
+      })
+    );
+    go("/alertas");
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Reconhecer" }));
+    await waitFor(() => expect(chamadas).toHaveLength(1));
+    expect(chamadas[0].metodo).toBe("POST");
+    expect(chamadas[0].url).toContain("/api/alerts/alt-001/ack");
+  });
+
+  it("o admin pode guardar o limite de ecrã", async () => {
+    const chamadas = [];
+    vi.stubGlobal(
+      "fetch",
+      comSessao(async (url, opts) => {
+        if (String(url).includes("/api/parental-rules/")) {
+          chamadas.push({ url: String(url), metodo: opts?.method, corpo: JSON.parse(opts.body) });
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              rule: { id: "reg-001", limiteMinutos: 90, inicio: "20:00", fim: "22:00" },
+            }),
+          };
+        }
+        return {
+          ok: true,
+          json: async () => ({
+            rules: [
+              { id: "reg-001", deviceId: "dev-001", nome: "Telemóvel da Ana", limiteMinutos: 120, inicio: "20:00", fim: "22:00" },
+            ],
+          }),
+        };
+      })
+    );
+    go("/controlo-parental");
+    render(<App />);
+    const input = await screen.findByLabelText(/limite de ecrã/i);
+    fireEvent.change(input, { target: { value: "90" } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    await waitFor(() => expect(chamadas).toHaveLength(1));
+    expect(chamadas[0].metodo).toBe("PATCH");
+    expect(chamadas[0].corpo).toEqual({ limiteMinutos: 90 });
+  });
+});
+
+describe("navegação", () => {
+  it.each(routes)("a rota $path renderiza a página $heading", async ({ path, heading }) => {
+    go(path);
+    render(<App />);
+    expect(
+      await screen.findByRole("heading", { level: 1, name: heading })
+    ).toBeInTheDocument();
+  });
+
+  it.each(routes)("o link $label aponta para $path", async ({ path, label }) => {
     go("/");
     render(<App />);
     // hidden: true — o objetivo é o contrato do href, não a visibilidade
     // (a visibilidade é verada em "sidebar e acessibilidade").
     expect(
-      screen.getByRole("link", { name: label, hidden: true })
+      await screen.findByRole("link", { name: label, hidden: true })
     ).toHaveAttribute("href", path);
   });
 
@@ -81,7 +336,7 @@ describe("navegação", () => {
     go("/rota-inexistente");
     render(<App />);
     expect(
-      screen.getByRole("heading", { level: 1, name: /página não encontrada/i })
+      await screen.findByRole("heading", { level: 1, name: /página não encontrada/i })
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("link", { name: /voltar ao dashboard/i }));
     expect(
@@ -91,25 +346,34 @@ describe("navegação", () => {
 });
 
 describe("sidebar e acessibilidade", () => {
-  it("em desktop a sidebar visível não está oculta a leitores de ecrã", () => {
+  it("em desktop a sidebar visível não está oculta a leitores de ecrã", async () => {
     mockViewport({ desktop: true });
     go("/");
     const { container } = render(<App />);
+    await waitFor(() =>
+      expect(container.querySelector("aside")).not.toBeNull()
+    );
     const aside = container.querySelector("aside");
     expect(aside).not.toHaveAttribute("aria-hidden", "true");
   });
 
-  it("em mobile a sidebar fechada está oculta", () => {
+  it("em mobile a sidebar fechada está oculta", async () => {
     mockViewport({ desktop: false });
     go("/");
     const { container } = render(<App />);
+    await waitFor(() =>
+      expect(container.querySelector("aside")).not.toBeNull()
+    );
     expect(container.querySelector("aside")).toHaveAttribute("aria-hidden", "true");
   });
 
-  it("em mobile o botão de menu abre e Escape fecha a sidebar", () => {
+  it("em mobile o botão de menu abre e Escape fecha a sidebar", async () => {
     mockViewport({ desktop: false });
     go("/");
     const { container } = render(<App />);
+    await waitFor(() =>
+      expect(container.querySelector("aside")).not.toBeNull()
+    );
     fireEvent.click(
       screen.getByRole("button", { name: /abrir menu/i, hidden: true })
     );
@@ -120,10 +384,10 @@ describe("sidebar e acessibilidade", () => {
 });
 
 describe("header", () => {
-  it("mostra o título da página atual", () => {
+  it("mostra o título da página atual", async () => {
     go("/dispositivos");
     render(<App />);
-    expect(screen.getByRole("banner")).toHaveTextContent("Dispositivos");
+    expect(await screen.findByRole("banner")).toHaveTextContent("Dispositivos");
   });
 });
 
@@ -131,7 +395,7 @@ describe("ligação à API", () => {
   it("o Dashboard mostra os dispositivos e alertas da API", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (url) => ({
+      comSessao(async (url) => ({
         ok: true,
         json: async () =>
           String(url).includes("devices") ? devicesPayload : alertsPayload,
@@ -146,7 +410,7 @@ describe("ligação à API", () => {
   it("a página de Dispositivos lista os dispositivos da API", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => ({ ok: true, json: async () => devicesPayload }))
+      comSessao(async () => ({ ok: true, json: async () => devicesPayload }))
     );
     go("/dispositivos");
     render(<App />);
@@ -156,7 +420,7 @@ describe("ligação à API", () => {
   it("a página de Alertas mostra as mensagens da API", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => ({ ok: true, json: async () => alertsPayload }))
+      comSessao(async () => ({ ok: true, json: async () => alertsPayload }))
     );
     go("/alertas");
     render(<App />);
@@ -168,7 +432,7 @@ describe("ligação à API", () => {
   it("sem API disponível o Dashboard mostra mensagem de erro", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => {
+      comSessao(async () => {
         throw new Error("offline");
       })
     );
@@ -189,7 +453,7 @@ describe("ligação à API", () => {
     };
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (url) => ({
+      comSessao(async (url) => ({
         ok: true,
         json: async () =>
           String(url).includes("devices") ? devices : alertsPayload,
@@ -219,7 +483,7 @@ describe("ligação à API", () => {
     };
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => ({ ok: true, json: async () => alerts }))
+      comSessao(async () => ({ ok: true, json: async () => alerts }))
     );
     go("/alertas");
     render(<App />);
@@ -280,7 +544,7 @@ describe("ligação à API", () => {
   it.each(paginasApi)("a página $path mostra os dados da API", async ({ path, payload, texto }) => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => ({ ok: true, json: async () => payload }))
+      comSessao(async () => ({ ok: true, json: async () => payload }))
     );
     go(path);
     render(<App />);

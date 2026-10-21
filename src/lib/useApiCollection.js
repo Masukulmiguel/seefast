@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 // Carrega uma coleção da API e gere os estados de carregamento/erro.
 // `chave` é o nome do array dentro do payload JSON (ex.: "devices").
 export function useApiCollection(endpoint, chave) {
   const [status, setStatus] = useState("loading");
   const [items, setItems] = useState([]);
+  const [gatilho, setGatilho] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -26,7 +27,10 @@ export function useApiCollection(endpoint, chave) {
     return () => {
       cancelled = true;
     };
-  }, [endpoint, chave]);
+  }, [endpoint, chave, gatilho]);
 
-  return { status, items };
+  // Recarrega a coleção (usado depois de uma escrita).
+  const recarregar = useCallback(() => setGatilho((c) => c + 1), []);
+
+  return { status, items, recarregar };
 }

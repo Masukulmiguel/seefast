@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
+import { useSession } from "../lib/session.jsx";
 import "./Sidebar.css";
 
 const links = [
@@ -24,6 +25,7 @@ function queryDesktop() {
 
 export default function Sidebar({ open, onClose }) {
   const asideRef = useRef(null);
+  const { user, sair } = useSession();
   const [isDesktop, setIsDesktop] = useState(queryDesktop);
 
   useEffect(() => {
@@ -70,6 +72,12 @@ export default function Sidebar({ open, onClose }) {
           </NavLink>
         ))}
       </nav>
+      <div className="sidebar-footer">
+        <span className="sidebar-user">{user?.email}</span>
+        <button type="button" className="sidebar-logout" onClick={sair}>
+          Sair
+        </button>
+      </div>
     </aside>
   );
 }

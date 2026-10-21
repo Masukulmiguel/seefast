@@ -112,6 +112,121 @@ a {
   color: var(--sf-text);
 }
 
+/* Ecrã de login. */
+.login {
+  max-width: 360px;
+  margin: 48px auto;
+  background: var(--sf-surface);
+  border: 1px solid var(--sf-border);
+  border-radius: var(--sf-radius);
+  padding: 24px;
+  box-shadow: var(--sf-shadow);
+}
+
+.login h1 {
+  margin: 0 0 4px;
+  font-size: 20px;
+}
+
+.login-subtitulo {
+  color: var(--sf-muted);
+  margin: 0 0 20px;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.login-form label {
+  font-size: 12px;
+  color: var(--sf-muted);
+  margin-top: 8px;
+}
+
+.login-form input {
+  padding: 8px 10px;
+  border: 1px solid var(--sf-border);
+  border-radius: 6px;
+  font: inherit;
+  background: var(--sf-bg);
+  color: var(--sf-text);
+}
+
+.login-form input:focus-visible {
+  outline: 2px solid var(--sf-primary);
+  outline-offset: 1px;
+}
+
+.login-erro {
+  color: var(--sf-danger);
+  font-size: 13px;
+  margin: 12px 0 0;
+}
+
+.login-submit {
+  margin-top: 18px;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--sf-primary);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.login-submit:hover {
+  background: var(--sf-primary-dark);
+}
+
+.login-submit:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+/* Linhas de lista com acções (bloquear app, reconhecer alerta, editar regra). */
+.linha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.linha-texto {
+  flex: 1;
+  min-width: 200px;
+}
+
+.linha-nota {
+  color: var(--sf-muted);
+  font-size: 12px;
+}
+
+.linha-input {
+  width: 90px;
+  padding: 5px 8px;
+  border: 1px solid var(--sf-border);
+  border-radius: 6px;
+  font: inherit;
+  background: var(--sf-bg);
+  color: var(--sf-text);
+}
+
+.linha-acao {
+  border: 1px solid var(--sf-border);
+  background: var(--sf-surface);
+  color: var(--sf-text);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.linha-acao:hover {
+  border-color: var(--sf-primary);
+  color: var(--sf-primary);
+}
+
 /* Cartão de conteúdo usado por todas as páginas (placeholder e dados da API). */
 .page-placeholder {  background: var(--sf-surface);
   border: 1px solid var(--sf-border);

@@ -11,7 +11,7 @@ export default function DataCollectionPage({
   textoVazio = "Não há dados para mostrar.",
   textoACarregar = "A carregar…",
 }) {
-  const { status, items } = useApiCollection(endpoint, chave);
+  const { status, items, recarregar } = useApiCollection(endpoint, chave);
   const lista = ordenar ? ordenar(items) : items;
 
   return (
@@ -42,7 +42,7 @@ export default function DataCollectionPage({
             <ul>
               {lista.map((item, index) => (
                 <li key={item.id ?? item.deviceId ?? index}>
-                  {aoRenderizarItem(item)}
+                  {aoRenderizarItem(item, { recarregar })}
                 </li>
               ))}
             </ul>

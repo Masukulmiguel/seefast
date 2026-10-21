@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { SessionProvider, useSession } from './lib/session.jsx'
 import Sidebar from './components/Sidebar.jsx'
 import Header from './components/Header.jsx'
+import Login from './pages/Login.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import Devices from './pages/Devices.jsx'
 import LocationPage from './pages/LocationPage.jsx'
@@ -12,7 +14,8 @@ import Permissions from './pages/Permissions.jsx'
 import Audit from './pages/Audit.jsx'
 import NotFound from './pages/NotFound.jsx'
 
-export default function App() {
+function Painel() {
+  const { estado } = useSession()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   useEffect(() => {
@@ -24,34 +27,58 @@ export default function App() {
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [sidebarOpen])
 
-  return (
-    <BrowserRouter>
+  if (estado === 'a-carregar') {
+    return (
       <div className="app-shell">
-        <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-        {sidebarOpen && (
-          <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />
-        )}
         <div className="app-main">
-          <Header onMenu={() => setSidebarOpen((o) => !o)} />
           <main className="app-content">
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/dispositivos" element={<Devices />} />
-              <Route path="/localizacao" element={<LocationPage />} />
-              <Route path="/controlo-parental" element={<Parental />} />
-              <Route path="/aplicacoes" element={<AppsPage />} />
-              <Route path="/alertas" element={<Alerts />} />
-              <Route path="/permissoes" element={<Permissions />} />
-              <Route path="/auditoria" element={<Audit />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+            <p>A verificar a sessão…</p>
           </main>
-          <footer className="app-footer">
-            SeeFast MVP — funcionalidades operacionais dependem da app SeeFast
-            Android e do consentimento explícito do utilizador.
-          </footer>
         </div>
       </div>
+    )
+  }
+
+  if (estado === 'anonimo') {
+    return <Login />
+  }
+
+  return (
+    <div className="app-shell">
+      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      {sidebarOpen && (
+        <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />
+      )}
+      <div className="app-main">
+        <Header onMenu={() => setSidebarOpen((o) => !o)} />
+        <main className="app-content">
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/dispositivos" element={<Devices />} />
+            <Route path="/localizacao" element={<LocationPage />} />
+            <Route path="/controlo-parental" element={<Parental />} />
+            <Route path="/aplicacoes" element={<AppsPage />} />
+            <Route path="/alertas" element={<Alerts />} />
+            <Route path="/permissoes" element={<Permissions />} />
+            <Route path="/auditoria" element={<Audit />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </main>
+        <footer className="app-footer">
+          SeeFast MVP — funcionalidades operacionais dependem da app SeeFast
+          Android e do consentimento explícito do utilizador.
+        </footer>
+      </div>
+    </div>
+  )
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <SessionProvider>
+        <Painel />
+      </SessionProvider>
     </BrowserRouter>
   )
 }
