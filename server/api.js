@@ -1,44 +1,15 @@
 import { createServer } from "node:http";
 import { sortByDateDesc } from "../src/lib/dates.js";
+import { openDatabase, runMigrations, seedDatabase } from "./db.js";
 
 const PORT = Number(process.env.PORT) || 3001;
 const HOST = "127.0.0.1";
 
-const devices = [
-  { id: "dev-001", nome: "Telemóvel da Ana", estado: "online", bateria: 82 },
-  { id: "dev-002", nome: "Tablet do João", estado: "offline", bateria: 34 },
-];
+const db = openDatabase();
+runMigrations(db);
+seedDatabase(db);
 
-const alerts = [
-  { id: "alt-003", nivel: "critical", mensagem: "Root detetado no dispositivo dev-003", em: "2026-10-21T08:15:00Z" },
-  { id: "alt-001", nivel: "warning", mensagem: "Dispositivo dev-002 sem ligação", em: "2026-10-20T09:00:00Z" },
-  { id: "alt-002", nivel: "info", mensagem: "Nova app instalada no dispositivo dev-001", em: "2026-10-19T11:30:00Z" },
-];
-
-const locations = [
-  { deviceId: "dev-001", nome: "Telemóvel da Ana", lat: 38.7223, lon: -9.1393, atualizadoEm: "2026-10-21T08:00:00Z" },
-  { deviceId: "dev-002", nome: "Tablet do João", lat: 41.1579, lon: -8.6291, atualizadoEm: "2026-10-20T17:30:00Z" },
-];
-
-const rules = [
-  { id: "reg-001", deviceId: "dev-001", nome: "Telemóvel da Ana", limiteMinutos: 120, inicio: "20:00", fim: "22:00" },
-  { id: "reg-002", deviceId: "dev-002", nome: "Tablet do João", limiteMinutos: 60, inicio: "19:00", fim: "21:00" },
-];
-
-const apps = [
-  { id: "app-001", deviceId: "dev-001", nome: "Instagram", pacote: "com.instagram.android", tamanhoMb: 45, bloqueada: true },
-  { id: "app-002", deviceId: "dev-001", nome: "TikTok", pacote: "com.zhiliaoapp.musically", tamanhoMb: 78, bloqueada: false },
-];
-
-const permissions = [
-  { deviceId: "dev-001", nome: "Telemóvel da Ana", consentimento: "concedido", camera: false, microfone: false, localizacao: true },
-  { deviceId: "dev-002", nome: "Tablet do João", consentimento: "pendente", camera: false, microfone: false, localizacao: false },
-];
-
-const entries = [
-  { id: "aud-001", em: "2026-10-21T07:45:00Z", ator: "admin@seefast", acao: "atualizou limite de ecrã", alvo: "dev-001" },
-  { id: "aud-002", em: "2026-10-20T14:10:00Z", ator: "admin@seefast", acao: "bloqueou aplicação", alvo: "app-001" },
-];
+const bool = (v) => Boolean(v);
 
 function sendJson(res, status, payload) {
   const body = JSON.stringify(payload);
@@ -53,17 +24,72 @@ function sendJson(res, status, payload) {
 }
 
 const routes = {
-  "GET /api/health": (req, res) => sendJson(res, 200, { status: "ok", service: "seefast-api" }),
-  "GET /api/devices": (req, res) => sendJson(res, 200, { devices }),
+  "GET /api/health": (req, res) =>
+    sendJson(res, 200, { status: "ok", service: "seefast-api" }),
+
+  "GET /api/devices": (req, res) =>
+    sendJson(res, 200, {
+      devices: db
+        .prepare("SELECT id, nome, estado, bateria FROM devices ORDER BY id")
+        .all(),
+    }),
+
   "GET /api/alerts": (req, res) =>
-    sendJson(res, 200, { alerts: sortByDateDesc(alerts) }),
+    sendJson(res, 200, {
+      alerts: sortByDateDesc(
+        db.prepare("SELECT id, nivel, mensagem, em FROM alerts").all()
+      ),
+    }),
+
   "GET /api/locations": (req, res) =>
-    sendJson(res, 200, { locations: sortByDateDesc(locations, "atualizadoEm") }),
-  "GET /api/parental-rules": (req, res) => sendJson(res, 200, { rules }),
-  "GET /api/apps": (req, res) => sendJson(res, 200, { apps }),
-  "GET /api/permissions": (req, res) => sendJson(res, 200, { permissions }),
+    sendJson(res, 200, {
+      locations: db
+        .prepare(
+          "SELECT device_id AS deviceId, nome, lat, lon, atualizado_em AS atualizadoEm FROM locations ORDER BY device_id"
+        )
+        .all(),
+    }),
+
+  "GET /api/parental-rules": (req, res) =>
+    sendJson(res, 200, {
+      rules: db
+        .prepare(
+          "SELECT id, device_id AS deviceId, nome, limite_minutos AS limiteMinutos, inicio, fim FROM parental_rules ORDER BY id"
+        )
+        .all(),
+    }),
+
+  "GET /api/apps": (req, res) =>
+    sendJson(res, 200, {
+      apps: db
+        .prepare(
+          "SELECT id, device_id AS deviceId, nome, pacote, tamanho_mb AS tamanhoMb, bloqueada FROM apps ORDER BY id"
+        )
+        .all()
+        .map((a) => ({ ...a, bloqueada: bool(a.bloqueada) })),
+    }),
+
+  "GET /api/permissions": (req, res) =>
+    sendJson(res, 200, {
+      permissions: db
+        .prepare(
+          "SELECT device_id AS deviceId, nome, consentimento, camera, microfone, localizacao FROM permissions ORDER BY device_id"
+        )
+        .all()
+        .map((p) => ({
+          ...p,
+          camera: bool(p.camera),
+          microfone: bool(p.microfone),
+          localizacao: bool(p.localizacao),
+        })),
+    }),
+
   "GET /api/audit": (req, res) =>
-    sendJson(res, 200, { entries: sortByDateDesc(entries) }),
+    sendJson(res, 200, {
+      entries: sortByDateDesc(
+        db.prepare("SELECT id, em, ator, acao, alvo FROM audit_entries").all()
+      ),
+    }),
 };
 
 const server = createServer((req, res) => {

@@ -2,6 +2,9 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { spawn } from "node:child_process";
 import net from "node:net";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
@@ -9,6 +12,7 @@ const PORT = 34173;
 const apiPath = resolve(dirname(fileURLToPath(import.meta.url)), "api.js");
 
 let child;
+let dbDir;
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -22,8 +26,14 @@ async function isUp() {
 }
 
 beforeAll(async () => {
+  // Base de dados temporária: os testes não tocam em data/seefast.db.
+  dbDir = mkdtempSync(join(tmpdir(), "seefast-api-"));
   child = spawn(process.execPath, [apiPath], {
-    env: { ...process.env, PORT: String(PORT) },
+    env: {
+      ...process.env,
+      PORT: String(PORT),
+      SEEFAST_DB: join(dbDir, "api.db"),
+    },
     stdio: "ignore",
   });
   for (let i = 0; i < 50; i++) {
@@ -33,8 +43,15 @@ beforeAll(async () => {
   throw new Error("API não arrancou dentro do tempo esperado");
 }, 20000);
 
-afterAll(() => {
-  if (child && child.exitCode === null) child.kill();
+afterAll(async () => {
+  // Espera que o processo da API saia antes de apagar a base temporária
+  // (senão o Windows mantém o ficheiro bloqueado e o rm falha com EPERM).
+  if (child && child.exitCode === null) {
+    const saiu = new Promise((r) => child.once("exit", r));
+    child.kill();
+    await saiu;
+  }
+  if (dbDir) rmSync(dbDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
 // Pedido HTTP bruto: permite enviar request-targets que o parser do Node
