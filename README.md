@@ -31,6 +31,18 @@ npm run server     # API em http://127.0.0.1:3001
 npm run dev        # frontend em http://localhost:5173
 ```
 
+### Produção (uma só porta)
+
+```bash
+npm run build      # compila o frontend para dist/
+npm run start:prod # serve dist/ + a API na mesma porta (PORT ou 3001)
+```
+
+O `server/producao.js` é o que se usa no Render e em qualquer hosting: serve
+os ficheiros estáticos compilados **e** encaminha `/api/*` para o mesmo
+handler da API, tudo numa única porta. É exigência do Render: um web service
+só pode escutar numa porta.
+
 O Vite faz proxy de `/api/*` para `http://127.0.0.1:3001` (ver `vite.config.js`),
 por isso o frontend fala com a API sem CORS em desenvolvimento.
 

@@ -16,7 +16,8 @@
     "test": "vitest run",
     "server": "node server/api.js",
     "seed:admin": "node server/seed-admin.js",
-    "start": "node start.js"
+    "start": "node start.js",
+    "start:prod": "node server/producao.js"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

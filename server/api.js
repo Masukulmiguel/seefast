@@ -485,7 +485,10 @@ function matchRoute(method, pathname) {
   return null;
 }
 
-const server = createServer(async (req, res) => {
+// O handler é exportado para que o servidor de produção (server/producao.js)
+// possa servir a API e os ficheiros estáticos na MESMA porta — exigência do
+// Render (um web service só pode escutar numa porta).
+export const handler = async (req, res) => {
   res.req = req;
 
   let url;
@@ -556,13 +559,18 @@ const server = createServer(async (req, res) => {
   }
 
   await rota.handler(req, res, { user, params: rota.params });
-});
+};
 
-server.listen(PORT, HOST, () => {
-  console.log(`[seefast-api] a escutar em http://${HOST}:${PORT}`);
-  if (HOST === "0.0.0.0") {
-    console.warn(
-      "[seefast-api] AVISO: a API esta acessivel a toda a rede local. Use apenas numa rede de confianza."
-    );
-  }
-});
+// Arranque directo: `node server/api.js` (desenvolvimento, porta 3001).
+// Em producao quem arranca e server/producao.js, que importa o handler acima.
+if (process.env.SEEFAST_SERVIDOR_UNICO !== "1") {
+  const server = createServer(handler);
+  server.listen(PORT, HOST, () => {
+    console.log(`[seefast-api] a escutar em http://${HOST}:${PORT}`);
+    if (HOST === "0.0.0.0") {
+      console.warn(
+        "[seefast-api] AVISO: a API esta acessivel a toda a rede local. Use apenas numa rede de confianza."
+      );
+    }
+  });
+}

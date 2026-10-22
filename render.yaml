@@ -1,0 +1,22 @@
+# Blueprint do Render: deploy do SeeFast com um clique.
+# https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: seefast
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start:prod
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22.19.0"
+      # A base de dados SQLite fica num disco persistente. Num serviço
+      # gratuito o Render nao da disco: os dados reiniciam a cada deploy.
+      # Para producao, criar um disco persistente e montar em /var/data,
+      # depois definir SEEFAST_DB=/var/data/seefast.db
+      - key: SEEFAST_DB
+        value: /var/data/seefast.db
+      - key: SEEFAST_HOST
+        value: 0.0.0.0
