@@ -8,6 +8,8 @@ import {
   createSession,
   deleteSession,
   getSessionUser,
+  hashPassword,
+  newUserId,
   parseCookies,
   sessionCookie,
   verifyPassword,
@@ -85,34 +87,70 @@ function utilizadorDaRequisicao(req) {
 }
 
 const routes = {
-  "GET /api/devices": (req, res) =>
+  "GET /api/devices": (req, res, { user }) =>
     sendJson(res, 200, {
       devices: db
         .prepare(
-          "SELECT id, nome, estado, bateria, ultimo_reporte FROM devices ORDER BY id"
+          `SELECT d.id, d.nome, d.estado, d.bateria, d.ultimo_reporte,
+                  d.user_id AS userId, u.email AS dono
+             FROM devices d
+             LEFT JOIN users u ON u.id = d.user_id
+            ORDER BY d.id`
+        )
+        .all()
+        .filter((d) => {
+          const escopo = escopoDeDispositivos(user);
+          return escopo === null || d.userId === escopo;
+        }),
+    }),
+
+  // Lista de clientes (admin): quem subscreveu o serviço e com quantos
+  // dispositivos. Nunca exposta a clientes.
+  "GET /api/clientes": (req, res) =>
+    sendJson(res, 200, {
+      clientes: db
+        .prepare(
+          `SELECT u.id, u.email, u.plano, u.estado, u.criado_em AS registadoEm,
+                  COUNT(d.id) AS dispositivos,
+                  MAX(d.ultimo_reporte) AS ultimoReporte
+             FROM users u
+             LEFT JOIN devices d ON d.user_id = u.id
+            WHERE u.role = 'cliente'
+            GROUP BY u.id, u.email, u.plano, u.estado, u.criado_em
+            ORDER BY u.criado_em DESC`
         )
         .all(),
     }),
 
   // Registo de um dispositivo novo: devolve o token uma unica vez.
-  "POST /api/devices": async (req, res) => {
+  // Admin: cria um dispositivo para um cliente ja registado (ou sem dono).
+  // Cliente: cria o seu proprio dispositivo (ligado a si).
+  "POST /api/devices": async (req, res, { user }) => {
     const corpo = await readJsonBody(req);
     const nome = String(corpo.nome ?? "").trim();
     if (!nome) {
       sendJson(res, 400, { error: "nome_em_falta" });
       return;
     }
+    // O dono: o admin pode indicar o cliente; o cliente e sempre o proprio.
+    // Um cliente nunca pode atribuir o dispositivo a outra conta.
+    let owner = user.id;
+    if (user.role === "admin") {
+      owner = String(corpo.userId ?? "").trim() || null;
+    }
     const id = `dev-${randomBytes(4).toString("hex")}`;
     const token = randomBytes(24).toString("hex");
     db.prepare(
-      "INSERT INTO devices (id, nome, estado, bateria, token_hash, criado_em) VALUES (?, ?, ?, ?, ?, ?)"
+      `INSERT INTO devices (id, nome, estado, bateria, token_hash, criado_em, user_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
     ).run(
       id,
       nome,
       "desconhecido",
       0,
       hashToken(token),
-      new Date().toISOString()
+      new Date().toISOString(),
+      owner
     );
     sendJson(res, 200, { device: { id, nome, token } });
   },
@@ -243,52 +281,76 @@ const routes = {
       ).map((a) => ({ ...a, reconhecido: bool(a.reconhecido) })),
     }),
 
-  "GET /api/locations": (req, res) =>
+  "GET /api/locations": (req, res, { user }) =>
     sendJson(res, 200, {
-      locations: db
-        .prepare(
-          "SELECT device_id AS deviceId, nome, lat, lon, atualizado_em AS atualizadoEm FROM locations ORDER BY device_id"
-        )
-        .all(),
+      locations: filtrarPorDono(
+        user,
+        db
+          .prepare(
+            "SELECT device_id AS deviceId, nome, lat, lon, atualizado_em AS atualizadoEm FROM locations ORDER BY device_id"
+          )
+          .all()
+      ),
     }),
 
-  "GET /api/parental-rules": (req, res) =>
+  "GET /api/parental-rules": (req, res, { user }) =>
     sendJson(res, 200, {
-      rules: db
-        .prepare(
-          "SELECT id, device_id AS deviceId, nome, limite_minutos AS limiteMinutos, inicio, fim FROM parental_rules ORDER BY id"
-        )
-        .all(),
+      rules: filtrarPorDono(
+        user,
+        db
+          .prepare(
+            "SELECT id, device_id AS deviceId, nome, limite_minutos AS limiteMinutos, inicio, fim FROM parental_rules ORDER BY id"
+          )
+          .all()
+      ),
     }),
 
-  "GET /api/apps": (req, res) =>
+  "GET /api/apps": (req, res, { user }) =>
     sendJson(res, 200, {
-      apps: db
-        .prepare(
-          `SELECT a.id, a.device_id AS deviceId, a.nome, a.pacote,
-                  a.tamanho_mb AS tamanhoMb, a.bloqueada,
-                  COALESCE(u.minutos, 0) AS minutos
-             FROM apps a
-             LEFT JOIN usage u ON u.device_id = a.device_id AND u.pacote = a.pacote
-            ORDER BY a.id`
-        )
-        .all()
-        .map((a) => ({ ...a, bloqueada: bool(a.bloqueada) })),
+      apps: filtrarPorDono(
+        user,
+        db
+          .prepare(
+            `SELECT a.id, a.device_id AS deviceId, a.nome, a.pacote,
+                    a.tamanho_mb AS tamanhoMb, a.bloqueada,
+                    COALESCE(u.minutos, 0) AS minutos
+               FROM apps a
+               LEFT JOIN usage u ON u.device_id = a.device_id AND u.pacote = a.pacote
+              ORDER BY a.id`
+          )
+          .all()
+          .map((a) => ({ ...a, bloqueada: bool(a.bloqueada) }))
+      ),
     }),
 
-  "GET /api/permissions": (req, res) =>
+  "GET /api/permissions": (req, res, { user }) =>
     sendJson(res, 200, {
-      permissions: db
-        .prepare(
-          "SELECT device_id AS deviceId, nome, consentimento, camera, microfone, localizacao FROM permissions ORDER BY device_id"
-        )
-        .all()
-        .map((p) => ({
-          ...p,
-          camera: bool(p.camera),
-          microfone: bool(p.microfone),
-          localizacao: bool(p.localizacao),
-        })),
+      permissions: filtrarPorDono(
+        user,
+        db
+          .prepare(
+            "SELECT device_id AS deviceId, nome, consentimento, camera, microfone, localizacao FROM permissions ORDER BY device_id"
+          )
+          .all()
+          .map((p) => ({
+            ...p,
+            camera: bool(p.camera),
+            microfone: bool(p.microfone),
+            localizacao: bool(p.localizacao),
+          }))
+      ),
+    }),
+
+  "GET /api/usage": (req, res, { user }) =>
+    sendJson(res, 200, {
+      usage: filtrarPorDono(
+        user,
+        db
+          .prepare(
+            "SELECT device_id AS deviceId, pacote, minutos, registado_em AS registadoEm FROM usage ORDER BY minutos DESC"
+          )
+          .all()
+      ),
     }),
 
   "GET /api/audit": (req, res) =>
@@ -396,6 +458,158 @@ async function handleLogin(req, res) {
   );
 }
 
+/**
+ * Registo publico: o cliente cria a sua conta e regista o seu telefone de
+ * uma so vez. E o que a app Android chama quando o utilizador configura o
+ * dispositivo pela primeira vez.
+ *
+ * Devolve o token do dispositivo em claro (uma unica vez) e a sessao do
+ * cliente, para que o painel fique logo autenticado.
+ */
+async function handleRegisto(req, res) {
+  let corpo;
+  try {
+    corpo = await readJsonBody(req);
+  } catch {
+    sendJson(res, 400, { error: "pedido_invalido" });
+    return;
+  }
+
+  const email = String(corpo.email ?? "").trim().toLowerCase();
+  const password = String(corpo.password ?? "");
+  const nome = String(corpo.nome ?? "").trim() || "Dispositivo";
+
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    sendJson(res, 400, { error: "email_invalido" });
+    return;
+  }
+  if (password.length < 8) {
+    sendJson(res, 400, { error: "password_curta" });
+    return;
+  }
+
+  const existente = db
+    .prepare("SELECT id, role FROM users WHERE email = ?")
+    .get(email);
+  if (existente) {
+    // A conta ja existe: nao criamos outra. O cliente tem de entrar.
+    sendJson(res, 409, { error: "conta_existe" });
+    return;
+  }
+
+  const userId = newUserId();
+  const deviceId = `dev-${randomBytes(4).toString("hex")}`;
+  const token = randomBytes(24).toString("hex");
+  const agora = new Date().toISOString();
+
+  db.transaction(() => {
+    db.prepare(
+      `INSERT INTO users (id, email, password_hash, role, criado_em, plano, estado)
+       VALUES (?, ?, ?, 'cliente', ?, 'gratuito', 'activo')`
+    ).run(userId, email, hashPassword(password), agora);
+
+    db.prepare(
+      `INSERT INTO devices (id, nome, estado, bateria, token_hash, criado_em, user_id)
+       VALUES (?, ?, 'desconhecido', 0, ?, ?, ?)`
+    ).run(deviceId, nome, hashToken(token), agora, userId);
+  })();
+
+  const { token: sessao } = createSession(db, userId);
+  sendJson(
+    res,
+    201,
+    {
+      user: { id: userId, email, role: "cliente" },
+      device: { id: deviceId, nome, token },
+    },
+    { "Set-Cookie": sessionCookie(sessao) }
+  );
+}
+
+/**
+ * Liga um dispositivo a uma conta.
+ *
+ * Chamado pela app Android na primeira configuracao (e sempre que o
+ * utilizador se liga a partir de um telefone novo):
+ *   - conta inexistente  -> cria a conta de cliente + o dispositivo;
+ *   - conta existente    -> valida a password e cria um dispositivo novo
+ *                          ligado a essa conta.
+ *
+ * Em ambos os casos devolve o token do dispositivo em claro (uma unica vez)
+ * e a sessao do cliente, para o painel ficar logo autenticado.
+ */
+async function handleLigar(req, res) {
+  let corpo;
+  try {
+    corpo = await readJsonBody(req);
+  } catch {
+    sendJson(res, 400, { error: "pedido_invalido" });
+    return;
+  }
+
+  const email = String(corpo.email ?? "").trim().toLowerCase();
+  const password = String(corpo.password ?? "");
+  const nome = String(corpo.nome ?? "").trim() || "Dispositivo";
+
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    sendJson(res, 400, { error: "email_invalido" });
+    return;
+  }
+  if (password.length < 8) {
+    sendJson(res, 400, { error: "password_curta" });
+    return;
+  }
+
+  const existente = db
+    .prepare("SELECT id, email, password_hash, role, estado FROM users WHERE email = ?")
+    .get(email);
+
+  let userId;
+  if (existente) {
+    if (existente.role === "admin") {
+      // Um admin nao e um cliente: a app nao cria dispositivos de admin.
+      sendJson(res, 403, { error: "conta_reservada" });
+      return;
+    }
+    if (existente.estado !== "activo") {
+      sendJson(res, 403, { error: "conta_suspensa" });
+      return;
+    }
+    if (!verifyPassword(password, existente.password_hash)) {
+      sendJson(res, 401, { error: "credenciais_invalidas" });
+      return;
+    }
+    userId = existente.id;
+  } else {
+    userId = newUserId();
+    db.prepare(
+      `INSERT INTO users (id, email, password_hash, role, criado_em, plano, estado)
+       VALUES (?, ?, ?, 'cliente', ?, 'gratuito', 'activo')`
+    ).run(userId, email, hashPassword(password), new Date().toISOString());
+  }
+
+  const deviceId = `dev-${randomBytes(4).toString("hex")}`;
+  const token = randomBytes(24).toString("hex");
+  const agora = new Date().toISOString();
+
+  db.prepare(
+    `INSERT INTO devices (id, nome, estado, bateria, token_hash, criado_em, user_id)
+     VALUES (?, ?, 'desconhecido', 0, ?, ?, ?)`
+  ).run(deviceId, nome, hashToken(token), agora, userId);
+
+  const { token: sessao } = createSession(db, userId);
+  sendJson(
+    res,
+    existente ? 200 : 201,
+    {
+      user: { id: userId, email, role: "cliente" },
+      device: { id: deviceId, nome, token },
+      contaNova: !existente,
+    },
+    { "Set-Cookie": sessionCookie(sessao) }
+  );
+}
+
 function handleLogout(req, res) {
   deleteSession(db, tokenDaRequisicao(req));
   res.writeHead(204, { ...corsHeaders(req), "Set-Cookie": clearSessionCookie() });
@@ -417,6 +631,7 @@ const ADMIN_ONLY = new Set([
   "PATCH /api/apps/:id",
   "PATCH /api/parental-rules/:id",
   "POST /api/alerts/:id/ack",
+  "GET /api/clientes",
 ]);
 
 // Ingestão: o agente Android autentica-se com o token do dispositivo.
@@ -457,6 +672,29 @@ function registarAuditoria(user, acao, alvo) {
     acao,
     alvo
   );
+}
+
+/**
+ * Escopo de dispositivos visivel para o utilizador.
+ * O admin ve todos; o cliente ve apenas os seus.
+ * Devolve null para "todos" ou o id do dono.
+ */
+function escopoDeDispositivos(user) {
+  if (!user || user.role === "admin") return null;
+  return user.id;
+}
+
+/** Filtra uma lista de registos (por device_id) pelo escopo do utilizador. */
+function filtrarPorDono(user, registos) {
+  const escopo = escopoDeDispositivos(user);
+  if (escopo === null) return registos;
+  const meus = new Set(
+    db
+      .prepare("SELECT id FROM devices WHERE user_id = ?")
+      .all(escopo)
+      .map((d) => d.id)
+  );
+  return registos.filter((r) => meus.has(r.deviceId ?? r.device_id ?? r.id));
 }
 
 // Procura a rota para (método, caminho), incluindo padrões com :param.
@@ -510,6 +748,18 @@ export const handler = async (req, res) => {
 
   if (key === "POST /api/login") {
     await handleLogin(req, res);
+    return;
+  }
+  // Registo publico: cria a conta do cliente e o seu dispositivo. Nao exige
+  // sessao porque e a app Android que o chama na primeira configuracao.
+  if (key === "POST /api/registo") {
+    await handleRegisto(req, res);
+    return;
+  }
+  // Liga um dispositivo a uma conta (app Android): cria a conta se nao
+  // existir, valida a password se existir, e devolve o token do dispositivo.
+  if (key === "POST /api/ligar") {
+    await handleLigar(req, res);
     return;
   }
   if (key === "POST /api/logout") {
