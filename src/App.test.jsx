@@ -97,13 +97,33 @@ describe("sessão", () => {
         return new Promise(() => {});
       })
     );
-    go("/");
+    go("/entrar");
     render(<App />);
     expect(
       await screen.findByRole("heading", { level: 1, name: "Entrar" })
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Email")).toBeInTheDocument();
     expect(screen.getByLabelText("Password")).toBeInTheDocument();
+  });
+
+  it("sem sessão válida mostra o site público", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url) => {
+        if (String(url) === "/api/session") {
+          return { ok: false, status: 401, json: async () => ({}) };
+        }
+        return new Promise(() => {});
+      })
+    );
+    go("/");
+    render(<App />);
+    expect(
+      await screen.findByRole("heading", {
+        level: 1,
+        name: /Veja o telemóvel/i,
+      })
+    ).toBeInTheDocument();
   });
 
   it("com sessão válida mostra o painel", async () => {
@@ -127,7 +147,7 @@ describe("sessão", () => {
         return new Promise(() => {});
       })
     );
-    go("/");
+    go("/entrar");
     render(<App />);
     await screen.findByRole("heading", { level: 1, name: "Entrar" });
     fireEvent.change(screen.getByLabelText("Email"), {
@@ -155,7 +175,7 @@ describe("sessão", () => {
         return new Promise(() => {});
       })
     );
-    go("/");
+    go("/entrar");
     render(<App />);
     await screen.findByRole("heading", { level: 1, name: "Entrar" });
     fireEvent.change(screen.getByLabelText("Email"), {
@@ -168,14 +188,87 @@ describe("sessão", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/incorretos/i);
   });
 
-  it("o botão Sair volta ao ecrã de login", async () => {
+  it("o botão Sair volta ao site público", async () => {
     go("/");
     render(<App />);
     await screen.findByRole("heading", { level: 1, name: "Dashboard" });
     fireEvent.click(screen.getByRole("button", { name: "Sair", hidden: true }));
     expect(
-      await screen.findByRole("heading", { level: 1, name: "Entrar" })
+      await screen.findByRole("heading", {
+        level: 1,
+        name: /Veja o telemóvel/i,
+      })
     ).toBeInTheDocument();
+  });
+});
+
+describe("painéis por papel", () => {
+  it("o admin vê a página de administração", async () => {
+    vi.stubGlobal(
+      "fetch",
+      comSessao(async () => ({
+        ok: true,
+        json: async () => ({ clientes: [], devices: [] }),
+      }))
+    );
+    go("/admin");
+    render(<App />);
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Administração" })
+    ).toBeInTheDocument();
+  });
+
+  it("o cliente vê o seu próprio painel", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url) => {
+        if (String(url) === "/api/session") {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              user: { id: "u9", email: "miguel@familia.pt", role: "cliente" },
+            }),
+          };
+        }
+        return {
+          ok: true,
+          json: async () => ({ devices: [], locations: [], apps: [], usage: [], alerts: [], permissions: [] }),
+        };
+      })
+    );
+    go("/cliente");
+    render(<App />);
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "O meu telemóvel" })
+    ).toBeInTheDocument();
+  });
+
+  it("o cliente não vê a página de administração de clientes", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url) => {
+        if (String(url) === "/api/session") {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              user: { id: "u9", email: "miguel@familia.pt", role: "cliente" },
+            }),
+          };
+        }
+        return {
+          ok: true,
+          json: async () => ({ devices: [], locations: [], apps: [], usage: [], alerts: [], permissions: [] }),
+        };
+      })
+    );
+    go("/admin");
+    render(<App />);
+    await screen.findByRole("heading", { level: 1, name: "O meu telemóvel" });
+    expect(
+      screen.queryByRole("heading", { level: 1, name: "Administração" })
+    ).not.toBeInTheDocument();
   });
 });
 

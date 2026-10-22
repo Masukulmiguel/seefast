@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useSession } from "../lib/session.jsx";
+import { IconeEscudo } from "../components/Icones.jsx";
 
 export default function Login() {
   const { entrar } = useSession();
@@ -15,8 +17,8 @@ export default function Login() {
     try {
       await entrar(email, password);
     } catch {
-      // A API não distingue email inválido de password errada — o mesmo
-      // erro é mostrado nos dois casos.
+      // A API nao distingue email invalido de password errada — o mesmo
+      // erro e mostrado nos dois casos.
       setErro("Email ou password incorretos.");
     } finally {
       setASubmeter(false);
@@ -24,12 +26,22 @@ export default function Login() {
   }
 
   return (
-    <main className="app-content">
+    <main className="login-wrap">
       <section className="login">
+        <Link
+          to="/"
+          className="landing-logo"
+          style={{ marginBottom: 22, color: "var(--sf-text)" }}
+        >
+          <IconeEscudo />
+          SeeFast
+        </Link>
+
         <h1>Entrar</h1>
         <p className="login-subtitulo">
-          Painel SeeFast — acesso reservado ao supervisor da conta.
+          O teu painel. Vê os teus dispositivos e o que se passa neles.
         </p>
+
         <form className="login-form" onSubmit={submeter}>
           <label htmlFor="login-email">Email</label>
           <input
@@ -63,6 +75,14 @@ export default function Login() {
             {aSubmeter ? "A entrar…" : "Entrar"}
           </button>
         </form>
+
+        <div className="login-rodape">
+          <p style={{ margin: "0 0 12px" }}>
+            Ainda não tens conta? Instala a app e cria-a lá — fica ligado ao teu
+            telemóvel.
+          </p>
+          <Link to="/">Voltar ao site</Link>
+        </div>
       </section>
     </main>
   );
