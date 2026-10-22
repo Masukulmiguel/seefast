@@ -18,9 +18,13 @@ import { join, resolve } from "node:path";
 const RAIZ = resolve(process.cwd());
 const DIST = join(RAIZ, "dist");
 
-// 1) Build do frontend se ainda não existir.
-if (!existsSync(join(DIST, "index.html"))) {
-  console.log("[start] dist/ ausente — a compilar o frontend...");
+// 1) Build do frontend se ainda não existir OU se faltarem assets essenciais.
+//    O favicon.ico e icon-192.png sao o canario: se faltarem, reconstrói tudo.
+const ficheirosEssenciais = ["index.html", "favicon.ico", "icon-192.png"];
+const precisaBuild = !ficheirosEssenciais.every(f => existsSync(join(DIST, f)));
+
+if (precisaBuild) {
+  console.log("[start] dist/ incompleto — a compilar o frontend...");
   const resultado = spawnSync("npm", ["run", "build"], {
     cwd: RAIZ,
     stdio: "inherit",

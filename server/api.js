@@ -122,7 +122,159 @@ const routes = {
         .all(),
     }),
 
-  // Registo de um dispositivo novo: devolve o token uma unica vez.
+  // Ingestão em lote de eventos. Cada evento traz o seu id (gerado no
+  // telemóvel): se o servidor já tiver esse id, conta-o como aceite sem
+  // duplicar. É o que torna o reenvio seguro.
+  "POST /api/devices/:id/eventos": async (req, res, { params }) => {
+    const corpo = await readJsonBody(req);
+    const eventos = Array.isArray(corpo.eventos) ? corpo.eventos : null;
+    if (!eventos) {
+      sendJson(res, 400, { error: "eventos_invalidos" });
+      return;
+    }
+    if (eventos.length > 200) {
+      sendJson(res, 400, { error: "lote_Grande" });
+      return;
+    }
+
+    const agora = new Date().toISOString();
+    let aceites = 0;
+    let duplicados = 0;
+
+    db.transaction(() => {
+      const inserir = db.prepare(
+        `INSERT INTO events (id, device_id, tipo, payload, ocorrido_em, recebido_em, criado_em)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO NOTHING`
+      );
+      for (const evento of eventos) {
+        const id = String(evento.id ?? "").trim();
+        const tipo = String(evento.tipo ?? "").trim();
+        if (!id || !tipo) continue;
+        // O corpo pode vir como objecto (JSON) ou ja como texto.
+        const payload =
+          typeof evento.corpo === "string" ? evento.corpo : JSON.stringify(evento.corpo ?? {});
+        const ocorrido =
+          String(evento.ocorridoEm ?? evento.ocorrido_em ?? agora);
+        const criado = String(evento.criadoEm ?? evento.criado_em ?? agora);
+        const info = inserir.run(id, params.id, tipo, payload, ocorrido, agora, criado);
+        if (info.changes > 0) {
+          aceites += 1;
+        } else {
+          // Já existia: reenvio. Conta como aceite (o telemóvel pode marcar
+          // como sincronizado) mas não duplica.
+          duplicados += 1;
+        }
+      }
+
+      if (aceites > 0) {
+        db.prepare(
+          `INSERT INTO sessoes_sincronizacao (device_id, ultima_em, eventos_aceites)
+           VALUES (?, ?, ?)
+           ON CONFLICT(device_id) DO UPDATE SET ultima_em = excluded.ultima_em,
+             eventos_aceites = sessoes_sincronizacao.eventos_aceites + excluded.eventos_aceites`
+        ).run(params.id, agora, aceites);
+      }
+    })();
+
+    // Actualiza o estado do dispositivo a partir do ultimo evento de estado.
+    const ultimoEstado = [...eventos]
+      .reverse()
+      .find((e) => String(e.tipo ?? "") === "ESTADO");
+    if (ultimoEstado) {
+      const payload =
+        typeof ultimoEstado.corpo === "string"
+          ? JSON.parse(ultimoEstado.corpo || "{}")
+          : ultimoEstado.corpo ?? {};
+      db.prepare(
+        "UPDATE devices SET estado = ?, bateria = ?, ultimo_reporte = ? WHERE id = ?"
+      ).run(
+        ["online", "offline", "desconhecido"].includes(payload.estado)
+          ? payload.estado
+          : "desconhecido",
+        Math.max(0, Math.min(100, Math.round(Number(payload.bateria) || 0))),
+        String(payload.em ?? agora),
+        params.id
+      );
+    }
+
+    sendJson(res, 200, {
+      aceites: aceites + duplicados,
+      novos: aceites,
+      duplicados,
+    });
+  },
+
+  // Eventos recebidos, com filtros (dispositivo, tipo, intervalo de datas).
+  "GET /api/eventos": (req, res, { user }) => {
+    const url = new URL(req.url, "http://localhost");
+    const dispositivo = url.searchParams.get("dispositivo") ?? "";
+    const tipo = url.searchParams.get("tipo") ?? "";
+    const de = url.searchParams.get("de") ?? "";
+    const ate = url.searchParams.get("ate") ?? "";
+    const limite = Math.min(
+      500,
+      Math.max(1, Number(url.searchParams.get("limite") ?? 100))
+    );
+
+    const condicoes = ["1 = 1"];
+    const valores = [];
+    if (dispositivo) {
+      valores.push(dispositivo);
+      condicoes.push(`device_id = $${valores.length}`);
+    }
+    if (tipo) {
+      valores.push(tipo);
+      condicoes.push(`tipo = $${valores.length}`);
+    }
+    if (de) {
+      valores.push(de);
+      condicoes.push(`ocorrido_em >= $${valores.length}`);
+    }
+    if (ate) {
+      valores.push(ate);
+      condicoes.push(`ocorrido_em <= $${valores.length}`);
+    }
+
+    const escopo = escopoDeDispositivos(user);
+    if (escopo !== null) {
+      const meus = db
+        .prepare("SELECT id FROM devices WHERE user_id = ?")
+        .all(escopo)
+        .map((d) => d.id);
+      if (meus.length === 0) {
+        sendJson(res, 200, { eventos: [], contagens: contagensDeEventos(meus) });
+        return;
+      }
+      valores.push(meus);
+      condicoes.push(`device_id = $${valores.length}`);
+    }
+
+    const eventos = db
+      .prepare(
+        `SELECT id, device_id AS deviceId, tipo, payload, ocorrido_em AS ocorridoEm,
+                recebido_em AS recebidoEm, criado_em AS criadoEm
+           FROM events
+          WHERE ${condicoes.join(" AND ")}
+          ORDER BY recebido_em DESC
+          LIMIT ${limite}`
+      )
+      .all(...valores)
+      .map((e) => ({ ...e, payload: parsePayload(e.payload) }));
+
+    sendJson(res, 200, {
+      eventos,
+      contagens: contagensDeEventos(
+        escopo === null
+          ? null
+          : db
+              .prepare("SELECT id FROM devices WHERE user_id = ?")
+              .all(escopo)
+              .map((d) => d.id)
+      ),
+    });
+  },
+
   // Admin: cria um dispositivo para um cliente ja registado (ou sem dono).
   // Cliente: cria o seu proprio dispositivo (ligado a si).
   "POST /api/devices": async (req, res, { user }) => {
@@ -641,6 +793,7 @@ const INGESTAO = new Set([
   "POST /api/devices/:id/apps",
   "POST /api/devices/:id/uso",
   "POST /api/devices/:id/consentimento",
+  "POST /api/devices/:id/eventos",
 ]);
 
 function hashToken(token) {
@@ -660,6 +813,38 @@ function dispositivoPorToken(token) {
       .prepare("SELECT id, nome FROM devices WHERE token_hash = ?")
       .get(hashToken(token)) ?? null
   );
+}
+
+/**
+ * Contagens de eventos por dispositivo (ou de toda a plataforma, quando
+ * [dispositivos] e null). O painel usa isto para mostrar quantos eventos
+ * received, e quando foi a ultima sincronizacao com sucesso.
+ */
+function contagensDeEventos(dispositivos) {
+  const filtro = dispositivos === null ? "" : `WHERE device_id IN (${dispositivos.map(() => "?").join(",")})`;
+  const args = dispositivos === null ? [] : dispositivos;
+  const porTipo = db
+    .prepare(`SELECT tipo, COUNT(*) AS total FROM events ${filtro} GROUP BY tipo`)
+    .all(...args);
+  const total = porTipo.reduce((soma, t) => soma + t.total, 0);
+  const ultima = db
+    .prepare(`SELECT MAX(recebido_em) AS ultima FROM events ${filtro}`)
+    .get(...args);
+  return {
+    total,
+    porTipo: Object.fromEntries(porTipo.map((t) => [t.tipo, t.total])),
+    ultimaRecebidaEm: ultima?.ultima ?? null,
+  };
+}
+
+/** O payload pode ter sido guardado como texto; devolve sempre um objecto. */
+function parsePayload(valor) {
+  if (valor && typeof valor === "object") return valor;
+  try {
+    return JSON.parse(String(valor ?? "{}"));
+  } catch {
+    return {};
+  }
 }
 
 function registarAuditoria(user, acao, alvo) {
